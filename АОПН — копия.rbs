@@ -1,6 +1,6 @@
 MaxS_count = 1
 MaxS = 2
-MaxOutage_count = 1
+MaxOutage_count = 2
 MaxOutage = 2
 
 Set spBranch = Rastr.Tables("vetv")
@@ -14,7 +14,6 @@ Set spBranchIq = spBranch.Cols("iq")
 Set spBranchNa = spBranch.Cols("na")
 Set spBranchNm = spBranch.Cols("name")
 Set spBranchSta = spBranch.Cols("sta")
-Set spBranchOutage = spBranch.Cols("Outage")
 Set spBranchSel = spBranch.Cols("Report")
 Set spBranchSmx = spBranch.Cols("slmax")
 Set spBranchImax = spBranch.Cols("i_max")
@@ -698,39 +697,21 @@ if UBound(SIndexes) >= 0 Then
                 ' Для каждой комбинации делаем 3 варианта: sta=2, sta=4, sta=5
                 do
                     ' sta = 2 (обе стороны отключены)
-                    Dim HasOutage = False
-                    for i = 0 to SOff-1
-                        if spBranchOutage.Z(SComb_Array(i)) = 1 Then HasOutage = True
-                    next
-                    if not HasOutage Then
-                        PlaceOutages SComb_Array, SOff, 2
-                    End If
-
+                    PlaceOutages SComb_Array, SOff, 2
+                   
                     ' sta = 4 (отключена от начала)
                     PlaceOutages SComb_Array, SOff, 4
-
+                   
                     ' sta = 5 (отключена от конца)
                     PlaceOutages SComb_Array, SOff, 5
                 loop while SComb.NextCombination(SComb_Array)
-
+               
                 ' Последняя комбинация
-                HasOutage = False
-                for i = 0 to SOff-1
-                    if spBranchOutage.Z(SComb_Array(i)) = 1 Then HasOutage = True
-                next
-                if not HasOutage Then
-                    PlaceOutages SComb_Array, SOff, 2
-                End If
+                PlaceOutages SComb_Array, SOff, 2
                 PlaceOutages SComb_Array, SOff, 4
                 PlaceOutages SComb_Array, SOff, 5
             Else
-                HasOutage = False
-                for i = 0 to SOff-1
-                    if spBranchOutage.Z(SComb_Array(i)) = 1 Then HasOutage = True
-                next
-                if not HasOutage Then
-                    PlaceOutages SComb_Array, SOff, 2
-                End If
+                PlaceOutages SComb_Array, SOff, 2
                 PlaceOutages SComb_Array, SOff, 4
                 PlaceOutages SComb_Array, SOff, 5
             End If
