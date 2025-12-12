@@ -236,7 +236,7 @@ col = 2
 for i = 0 to LineCount-1
     ndx = LineIndexes(i)
     lineName = spBranchNm.ZS(ndx)
-    sheetLines.Range(sheetLines.Cells(1,ол), sheetLines.Cells(1,col+4)).Merge
+    sheetLines.Range(sheetLines.Cells(1,col), sheetLines.Cells(1,col+4)).Merge
     sheetLines.Cells(1,col).Value = lineName
     sheetLines.Cells(1,col).HorizontalAlignment = -4108
 
@@ -611,12 +611,10 @@ End Sub
 Sub PlaceOutages(byref V, SCounter, SType)
     Dim OutComb()
     
-    ' Перед расчетом: восстанавливаем исходное состояние перед применением режима
+    ' Расчет режима только с ремонтом (без отключений)
     TopologyRestore
-    
-    Title = PlaceS(V, SCounter, SType)
-    DoRgm Title, ""
-    TopologyRestore
+    STitle = PlaceS(V, SCounter, SType)
+    DoRgm STitle, ""
 
     ' Проверка наличия возможных отключений
     if UBound(OutageIndexes) < 0 Then Exit Sub
@@ -631,20 +629,18 @@ Sub PlaceOutages(byref V, SCounter, SType)
                     STitle = PlaceS(V, SCounter, SType)
                     OutTitle = PlaceOffs(OutComb, OutOff)
                     DoRgm STitle, OutTitle
-                    TopologyRestore
                 loop while OutageComb.NextCombination(OutComb)
 
+                ' Последняя комбинация
                 TopologyRestore
                 STitle = PlaceS(V, SCounter, SType)
                 OutTitle = PlaceOffs(OutComb, OutOff)
                 DoRgm STitle, OutTitle
-                TopologyRestore
             Else
                 TopologyRestore
                 STitle = PlaceS(V, SCounter, SType)
                 OutTitle = PlaceOffs(OutComb, OutOff)
                 DoRgm STitle, OutTitle
-                TopologyRestore
             End If
         End If
     next
@@ -698,3 +694,26 @@ sheetPowerLines.Columns.AutoFit
 sheetPowerTrans.Columns.AutoFit
 
 MsgBox "Расчет завершен! Результаты выгружены на 5 листов Excel.", vbInformation, "Завершение расчета"p = spBranchPlIp.Z(ndx)
+                PlIq = spBranchPlIq.Z(ndx)
+                QlIp = spBranchQlIp.Z(ndx)
+                QlIq = spBranchQlIq.Z(ndx)
+
+                sheetPowerLines.Cells(GlobalRowPowerLines, col).Value = Sle
+                sheetPowerLines.Cells(GlobalRowPowerLines, col+1).Value = Slb
+                sheetPowerLines.Cells(GlobalRowPowerLines, col+2).Value = Round(PlIp,2)
+                sheetPowerLines.Cells(GlobalRowPowerLines, col+3).Value = Round(PlIq,2)
+                sheetPowerLines.Cells(GlobalRowPowerLines, col+4).Value = Round(QlIp,2)
+                sheetPowerLines.Cells(GlobalRowPowerLines, col+5).Value = Round(QlIq,2)
+
+                col = col + 6
+            next
+            GlobalRowPowerLines = GlobalRowPowerLines + 1
+
+            ' === Лист "Мощности по трансформаторам" ===
+            sheetPowerTrans.Cells(GlobalRowPowerTrans, 1).Value = RegimeName
+            col = 2
+            for i = 0 to TransCount-1
+                ndx = TransIndexes(i)
+                Sle = spBranchSle.Z(ndx)
+                Slb = spBranchSlb.Z(ndx)
+                PlI
