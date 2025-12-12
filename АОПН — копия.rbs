@@ -8,7 +8,7 @@ Set spNode = Rastr.Tables("node")
 
 PrepareTemplate
 
-' Поля ветвей
+' РџРѕР»СЏ РІРµС‚РІРµР№
 Set spBranchIp = spBranch.Cols("ip")
 Set spBranchIq = spBranch.Cols("iq")
 Set spBranchNa = spBranch.Cols("na")
@@ -22,18 +22,18 @@ Set spBranchIpr = spBranch.Cols("i_dop_r")
 Set spBranchGrp = spBranch.Cols("groupid")
 Set spBranchSrt = spBranch.Cols("_SortKey")
 Set spBranchTip = spBranch.Cols("tip")
-' Поля мощности
+' РџРѕР»СЏ РјРѕС‰РЅРѕСЃС‚РµР№
 Set spBranchSle = spBranch.Cols("sle")
 Set spBranchSlb = spBranch.Cols("slb")
 Set spBranchPlIp = spBranch.Cols("pl_ip")
 Set spBranchPlIq = spBranch.Cols("pl_iq")
 Set spBranchQlIp = spBranch.Cols("ql_ip")
 Set spBranchQlIq = spBranch.Cols("ql_iq")
-' Поля напряжений на концах линий
+' РџРѕР»СЏ РЅР°РїСЂСЏР¶РµРЅРёР№ РЅР° РєРѕРЅС†Р°С… РІРµС‚РІРё
 Set spBranchVIp = spBranch.Cols("v_ip")
 Set spBranchVIq = spBranch.Cols("v_iq")
 
-' Поля узлов
+' РџРѕР»СЏ СѓР·Р»РѕРІ
 Set spNodeSta = spNode.Cols("sta")
 Set spNodeNy = spNode.Cols("ny")
 Set spNodeName = spNode.Cols("name")
@@ -47,7 +47,7 @@ spExcel.SheetsInNewWorkbook = 5
 spExcel.Workbooks.Add
 spExcel.Visible = true
 
-' Создаём листы
+' Р›РёСЃС‚С‹ Excel
 Dim sheetNodes, sheetLines, sheetTrans, sheetPowerLines, sheetPowerTrans
 Set sheetNodes = spExcel.Worksheets(1)
 Set sheetLines = spExcel.Worksheets(2)
@@ -55,13 +55,13 @@ Set sheetTrans = spExcel.Worksheets(3)
 Set sheetPowerLines = spExcel.Worksheets(4)
 Set sheetPowerTrans = spExcel.Worksheets(5)
 
-sheetNodes.Name = "Напряжение в узлах"
-sheetLines.Name = "Токи по линиям"
-sheetTrans.Name = "Токи по трансформаторам"
-sheetPowerLines.Name = "Мощность по линиям"
-sheetPowerTrans.Name = "Мощность по трансформаторам"
+sheetNodes.Name = "РќР°РїСЂСЏР¶РµРЅРёСЏ РІ СѓР·Р»Р°С…"
+sheetLines.Name = "РўРѕРєРё РїРѕ Р»РёРЅРёСЏРј"
+sheetTrans.Name = "РўРѕРєРё РїРѕ С‚СЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂР°Рј"
+sheetPowerLines.Name = "РњРѕС‰РЅРѕСЃС‚Рё РїРѕ Р»РёРЅРёСЏРј"
+sheetPowerTrans.Name = "РњРѕС‰РЅРѕСЃС‚Рё РїРѕ С‚СЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂР°Рј"
 
-' Глобальные счётчики строк для каждого листа
+' Р“Р»РѕР±Р°Р»СЊРЅС‹Рµ СЃС‡РµС‚С‡РёРєРё СЃС‚СЂРѕРє РґР»СЏ РєР°Р¶РґРѕРіРѕ Р»РёСЃС‚Р°
 GlobalRowNodes = 3
 GlobalRowLines = 3
 GlobalRowTrans = 3
@@ -106,20 +106,20 @@ Set OutageComb = new Combinator
 
 TopologyStore
 
-' Массивы индексов элементов
+' РњР°СЃСЃРёРІС‹ РёРЅРґРµРєСЃРѕРІ СЌР»РµРјРµРЅС‚РѕРІ
 Dim BranchIndexes()
 Dim LineIndexes()
 Dim TransIndexes()
 Dim NodeIndexes()
 
-' Собираем все контролируемые ветви
+' Р’С‹Р±РѕСЂРєР° РІСЃРµС… РѕС‚РјРµС‡РµРЅРЅС‹С… РІРµС‚РІРµР№
 spBranch.SetSel("Report")
 ReDim BranchIndexes(spBranch.Count-1)
 BranchCount = 0
 ndx = spBranch.FindNextSel(-1)
 while ndx >= 0
     BranchIndexes(BranchCount) = ndx
-    ' Сортировка по напряжению
+    ' РћРїСЂРµРґРµР»РµРЅРёРµ РїРѕ РЅР°РїСЂСЏР¶РµРЅРёСЋ
     Uip = -1
     Uiq = -1
     for idx = 0 to spNode.Size-1
@@ -138,7 +138,7 @@ while ndx >= 0
     ndx = spBranch.FindNextSel(ndx)
 wend
 
-' Сортировка ветвей
+' РЎРѕСЂС‚РёСЂРѕРІРєР° РІРµС‚РІРµР№
 function BranchKey(index)
     BranchKey = spBranchSrt.Z(index)
 end function
@@ -154,7 +154,7 @@ for i = 1 to BranchCount-1
     BranchIndexes(j+1) = key
 next
 
-' Разделяем на линии и трансформаторы
+' Р Р°Р·РґРµР»РµРЅРёРµ РЅР° Р»РёРЅРёРё Рё С‚СЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂС‹
 ReDim LineIndexes(BranchCount-1)
 ReDim TransIndexes(BranchCount-1)
 LineCount = 0
@@ -163,10 +163,10 @@ TransCount = 0
 for i = 0 to BranchCount-1
     ndx = BranchIndexes(i)
     tipValue = spBranchTip.Z(ndx)
-    if tipValue = 0 Then ' ЛЭП
+    if tipValue = 0 Then ' Р›Р­Рџ
         LineIndexes(LineCount) = ndx
         LineCount = LineCount + 1
-    ElseIf tipValue = 1 Then ' Трансформатор
+    ElseIf tipValue = 1 Then ' РўСЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂ
         TransIndexes(TransCount) = ndx
         TransCount = TransCount + 1
     End If
@@ -175,7 +175,7 @@ next
 ReDim Preserve LineIndexes(LineCount-1)
 ReDim Preserve TransIndexes(TransCount-1)
 
-' Собираем контролируемые узлы
+' Р’С‹Р±РѕСЂРєР° РѕС‚РјРµС‡РµРЅРЅС‹С… СѓР·Р»РѕРІ
 spNode.SetSel("sel")
 ReDim NodeIndexes(spNode.Count-1)
 NodeCount = 0
@@ -186,7 +186,7 @@ while ndx >= 0
     NodeCount = NodeCount + 1
 wend
 
-' Собираем индексы для односторонних отключений (S) и полных отключений (Outage)
+' РњР°СЃСЃРёРІС‹ РёРЅРґРµРєСЃРѕРІ РґР»СЏ СЂРµРјРѕРЅС‚РёСЂСѓРµРјС‹С… СЌР»РµРјРµРЅС‚РѕРІ (S) Рё РїР»Р°РЅРѕРІС‹С… РѕС‚РєР»СЋС‡РµРЅРёР№ (Outage)
 Dim SIndexes()
 spBranch.SetSel("S")
 ReDim SIndexes(spBranch.Count)
@@ -209,49 +209,49 @@ while ndx >= 0
     ndx = spBranch.FindNextSel(ndx)
 wend
 
-' === Формируем шапки таблиц ===
+' === Р—РђР“РћР›РћР’РљР Р›РРЎРўРћР’ РћРўР§Р•РўРђ ===
 
-' Шапка для узлов
+' Р›РёСЃС‚ РґР»СЏ СѓР·Р»РѕРІ
 col = 2
 for i = 0 to NodeCount-1
     ndx = NodeIndexes(i)
     nodeName = spNodeName.ZS(ndx)
-    ' Объединяем 4 столбца для одного узла
+    ' РћР±СЉРµРґРёРЅСЏРµРј 4 РєРѕР»РѕРЅРєРё РґР»СЏ РѕРґРЅРѕРіРѕ СѓР·Р»Р°
     sheetNodes.Range(sheetNodes.Cells(1,col), sheetNodes.Cells(1,col+3)).Merge
     sheetNodes.Cells(1,col).Value = nodeName
     sheetNodes.Cells(1,col).HorizontalAlignment = -4108 ' xlCenter
 
-    sheetNodes.Cells(2,col).Value = "U, кВ"
-    sheetNodes.Cells(2,col+1).Value = "U/Uном, %"
-    sheetNodes.Cells(2,col+2).Value = "Umin, кВ"
-    sheetNodes.Cells(2,col+3).Value = "Umax, кВ"
+    sheetNodes.Cells(2,col).Value = "U, РєР’"
+    sheetNodes.Cells(2,col+1).Value = "U/UРЅРѕРј, %"
+    sheetNodes.Cells(2,col+2).Value = "Umin, РєР’"
+    sheetNodes.Cells(2,col+3).Value = "Umax, РєР’"
 
     col = col + 4
 next
-sheetNodes.Cells(1,1).Value = "Режим"
+sheetNodes.Cells(1,1).Value = "Р РµР¶РёРј"
 sheetNodes.Cells(2,1).Value = ""
 
-' Шапка для линий (токи) - добавляем напряжения
+' Р›РёСЃС‚ РґР»СЏ Р»РёРЅРёР№ (С‚РѕРєРё) - РїРѕРґСЂРѕР±РЅС‹Рµ РїР°СЂР°РјРµС‚СЂС‹
 col = 2
 for i = 0 to LineCount-1
     ndx = LineIndexes(i)
     lineName = spBranchNm.ZS(ndx)
-    sheetLines.Range(sheetLines.Cells(1,col), sheetLines.Cells(1,col+4)).Merge
+    sheetLines.Range(sheetLines.Cells(1,РѕР»), sheetLines.Cells(1,col+4)).Merge
     sheetLines.Cells(1,col).Value = lineName
     sheetLines.Cells(1,col).HorizontalAlignment = -4108
 
-    sheetLines.Cells(2,col).Value = "Iдоп, А"
-    sheetLines.Cells(2,col+1).Value = "I, А"
-    sheetLines.Cells(2,col+2).Value = "Iзагр, %"
-    sheetLines.Cells(2,col+3).Value = "Vнач, кВ"
-    sheetLines.Cells(2,col+4).Value = "Vкон, кВ"
+    sheetLines.Cells(2,col).Value = "IРґРѕРї, Рђ"
+    sheetLines.Cells(2,col+1).Value = "I, Рђ"
+    sheetLines.Cells(2,col+2).Value = "IР·Р°РіСЂ, %"
+    sheetLines.Cells(2,col+3).Value = "VРЅР°С‡, РєР’"
+    sheetLines.Cells(2,col+4).Value = "VРєРѕРЅ, РєР’"
 
     col = col + 5
 next
-sheetLines.Cells(1,1).Value = "Режим"
+sheetLines.Cells(1,1).Value = "Р РµР¶РёРј"
 sheetLines.Cells(2,1).Value = ""
 
-' Шапка для трансформаторов (токи)
+' Р›РёСЃС‚ РґР»СЏ С‚СЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂРѕРІ (С‚РѕРєРё)
 col = 2
 for i = 0 to TransCount-1
     ndx = TransIndexes(i)
@@ -260,16 +260,16 @@ for i = 0 to TransCount-1
     sheetTrans.Cells(1,col).Value = transName
     sheetTrans.Cells(1,col).HorizontalAlignment = -4108
 
-    sheetTrans.Cells(2,col).Value = "Iдоп, А"
-    sheetTrans.Cells(2,col+1).Value = "I, А"
-    sheetTrans.Cells(2,col+2).Value = "Iзагр, %"
+    sheetTrans.Cells(2,col).Value = "IРґРѕРї, Рђ"
+    sheetTrans.Cells(2,col+1).Value = "I, Рђ"
+    sheetTrans.Cells(2,col+2).Value = "IР·Р°РіСЂ, %"
 
     col = col + 3
 next
-sheetTrans.Cells(1,1).Value = "Режим"
+sheetTrans.Cells(1,1).Value = "Р РµР¶РёРј"
 sheetTrans.Cells(2,1).Value = ""
 
-' Шапка для линий (мощность)
+' Р›РёСЃС‚ РґР»СЏ Р»РёРЅРёР№ (РјРѕС‰РЅРѕСЃС‚Рё)
 col = 2
 for i = 0 to LineCount-1
     ndx = LineIndexes(i)
@@ -278,19 +278,19 @@ for i = 0 to LineCount-1
     sheetPowerLines.Cells(1,col).Value = lineName
     sheetPowerLines.Cells(1,col).HorizontalAlignment = -4108
 
-    sheetPowerLines.Cells(2,col).Value = "S(нач), МВА"
-    sheetPowerLines.Cells(2,col+1).Value = "S(кон), МВА"
-    sheetPowerLines.Cells(2,col+2).Value = "P(нач), МВт"
-    sheetPowerLines.Cells(2,col+3).Value = "P(кон), МВт"
-    sheetPowerLines.Cells(2,col+4).Value = "Q(нач), Мвар"
-    sheetPowerLines.Cells(2,col+5).Value = "Q(кон), Мвар"
+    sheetPowerLines.Cells(2,col).Value = "S(РЅР°С‡), РњР’Рђ"
+    sheetPowerLines.Cells(2,col+1).Value = "S(РєРѕРЅ), РњР’Рђ"
+    sheetPowerLines.Cells(2,col+2).Value = "P(РЅР°С‡), РњР’С‚"
+    sheetPowerLines.Cells(2,col+3).Value = "P(РєРѕРЅ), РњР’С‚"
+    sheetPowerLines.Cells(2,col+4).Value = "Q(РЅР°С‡), РњРІР°СЂ"
+    sheetPowerLines.Cells(2,col+5).Value = "Q(РєРѕРЅ), РњРІР°СЂ"
 
     col = col + 6
 next
-sheetPowerLines.Cells(1,1).Value = "Режим"
+sheetPowerLines.Cells(1,1).Value = "Р РµР¶РёРј"
 sheetPowerLines.Cells(2,1).Value = ""
 
-' Шапка для трансформаторов (мощность)
+' Р›РёСЃС‚ РґР»СЏ С‚СЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂРѕРІ (РјРѕС‰РЅРѕСЃС‚Рё)
 col = 2
 for i = 0 to TransCount-1
     ndx = TransIndexes(i)
@@ -299,16 +299,16 @@ for i = 0 to TransCount-1
     sheetPowerTrans.Cells(1,col).Value = transName
     sheetPowerTrans.Cells(1,col).HorizontalAlignment = -4108
 
-    sheetPowerTrans.Cells(2,col).Value = "S(нач), МВА"
-    sheetPowerTrans.Cells(2,col+1).Value = "S(кон), МВА"
-    sheetPowerTrans.Cells(2,col+2).Value = "P(нач), МВт"
-    sheetPowerTrans.Cells(2,col+3).Value = "P(кон), МВт"
-    sheetPowerTrans.Cells(2,col+4).Value = "Q(нач), Мвар"
-    sheetPowerTrans.Cells(2,col+5).Value = "Q(кон), Мвар"
+    sheetPowerTrans.Cells(2,col).Value = "S(РЅР°С‡), РњР’Рђ"
+    sheetPowerTrans.Cells(2,col+1).Value = "S(РєРѕРЅ), РњР’Рђ"
+    sheetPowerTrans.Cells(2,col+2).Value = "P(РЅР°С‡), РњР’С‚"
+    sheetPowerTrans.Cells(2,col+3).Value = "P(РєРѕРЅ), РњР’С‚"
+    sheetPowerTrans.Cells(2,col+4).Value = "Q(РЅР°С‡), РњРІР°СЂ"
+    sheetPowerTrans.Cells(2,col+5).Value = "Q(РєРѕРЅ), РњРІР°СЂ"
 
     col = col + 6
 next
-sheetPowerTrans.Cells(1,1).Value = "Режим"
+sheetPowerTrans.Cells(1,1).Value = "Р РµР¶РёРј"
 sheetPowerTrans.Cells(2,1).Value = ""
 
 class Combinator
@@ -401,24 +401,24 @@ Sub PrepareTemplate
     FieldsAdded = 0
     if spBranch.Cols.Find("S") < 0 Then
         spBranch.Cols.Add "S", PR_BOOL
-        spBranch.Cols("S").Prop(FL_ZAG) = "Одностор. откл"
+        spBranch.Cols("S").Prop(FL_ZAG) = "Р РµРјРѕРЅС‚РёСЂ. СЌР»РµРј"
         FieldsAdded = 1
     End If
     if spBranch.Cols.Find("Outage") < 0 Then
         spBranch.Cols.Add "Outage", PR_BOOL
-        spBranch.Cols("Outage").Prop(FL_ZAG) = "Откл"
+        spBranch.Cols("Outage").Prop(FL_ZAG) = "РћС‚РєР»"
         FieldsAdded = 1
     End If
     if spBranch.Cols.Find("Report") < 0 Then
         spBranch.Cols.Add "Report", PR_BOOL
-        spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
+        spBranch.Cols("Report").Prop(FL_ZAG) = "РћС‚С‡РµС‚"
         FieldsAdded = 1
     End If
     if spBranch.Cols.Find("_SortKey") < 0 Then
         spBranch.Cols.Add "_SortKey", PR_INT
     End if
     if FieldsAdded = 1 Then
-        MsgBox "Необходимые поля добавлены. Выберите ветви и запустите макрос повторно.",1,"Вариантные расчеты"
+        MsgBox "РќРµРѕР±С…РѕРґРёРјС‹Рµ РїРѕР»СЏ РґРѕР±Р°РІР»РµРЅС‹. РћС‚РјРµС‚СЊС‚Рµ РІРµС‚РІРё Рё Р·Р°РїСѓСЃС‚РёС‚Рµ СЃРєСЂРёРїС‚ РїРѕРІС‚РѕСЂРЅРѕ.",1,"РџРѕРґРіРѕС‚РѕРІРєР° С€Р°Р±Р»РѕРЅР°"
     End If
 End Sub
 
@@ -438,16 +438,15 @@ function PlaceOffs(byref V, OffCounter)
     PlaceOffs = OffList
 End function
 
-' Функция для одностороннего отключения (изменяем sta на 2, 4 или 5)
+' Р¤СѓРЅРєС†РёСЏ РґР»СЏ СѓСЃС‚Р°РЅРѕРІРєРё СЂРµРјРѕРЅС‚РёСЂСѓРµРјС‹С… СЌР»РµРјРµРЅС‚РѕРІ (РёР·РјРµРЅСЏРµРј sta РЅР° 2 РёР»Рё 3)
 function PlaceS(byref V, SCounter, SType)
     SList = ""
     for sc = 0 to SCounter-1
-        spBranchSta.Z(V(sc)) = SType ' 2, 4 или 5
+        spBranchSta.Z(V(sc)) = SType ' 2 РёР»Рё 3
         if sc > 0 Then SList = SList + " | "
         STypeStr = ""
-        if SType = 2 Then STypeStr = "(обе стороны)"
-        if SType = 4 Then STypeStr = "(от начала)"
-        if SType = 5 Then STypeStr = "(от конца)"
+        if SType = 2 Then STypeStr = "(РѕС‚РєР». СЃРѕ СЃС‚РѕСЂРѕРЅС‹ ip)"
+        if SType = 3 Then STypeStr = "(РѕС‚РєР». СЃРѕ СЃС‚РѕСЂРѕРЅС‹ iq)"
         SList = SList + Cstr(spBranchNm.ZS(V(sc))) + " " + STypeStr
     next
     PlaceS = SList
@@ -467,47 +466,47 @@ Sub DoRgm(STitle, OutageTitle)
         Status = Rastr.rgm("p")
         Rastr.LogEnable = 1
 
-        ' Формируем название режима
+        ' Р¤РѕСЂРјРёСЂСѓРµРј РЅР°Р·РІР°РЅРёРµ СЂРµР¶РёРјР°
         RegimeName = ""
         if STitle = "" Then
-            RegimeName = "Нормальная схема"
+            RegimeName = "РќРѕСЂРјР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј"
         Else
-            RegimeName = "Одностор. откл: " & STitle
+            RegimeName = "Р РµРјРѕРЅС‚РёСЂ. СЌР»РµРј: " & STitle
         End If
 
         if OutageTitle <> "" Then
             if RegimeName <> "" Then RegimeName = RegimeName & " + "
-            RegimeName = RegimeName & "Откл: " & OutageTitle
+            RegimeName = RegimeName & "РћС‚РєР»: " & OutageTitle
         End If
 
         if Status <> AST_OK Then
-            ' Режим не существует - записываем во все листы
-            sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName & " [Режим не существует]"
+            ' Р РµР¶РёРј РЅРµ СЃРѕС€РµР»СЃСЏ - Р·Р°РїРёСЃС‹РІР°РµРј РЅР° РІСЃРµ Р»РёСЃС‚С‹
+            sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName & " [Р РµР¶РёРј РЅРµ СЃРѕС€РµР»СЃСЏ]"
             sheetNodes.Cells(GlobalRowNodes, 1).Interior.Color = RGB(200,0,0)
             sheetNodes.Cells(GlobalRowNodes, 1).Font.Color = RGB(255,255,255)
             GlobalRowNodes = GlobalRowNodes + 1
 
-            sheetLines.Cells(GlobalRowLines, 1).Value = RegimeName & " [Режим не существует]"
+            sheetLines.Cells(GlobalRowLines, 1).Value = RegimeName & " [Р РµР¶РёРј РЅРµ СЃРѕС€РµР»СЃСЏ]"
             sheetLines.Cells(GlobalRowLines, 1).Interior.Color = RGB(200,0,0)
             sheetLines.Cells(GlobalRowLines, 1).Font.Color = RGB(255,255,255)
             GlobalRowLines = GlobalRowLines + 1
 
-            sheetTrans.Cells(GlobalRowTrans, 1).Value = RegimeName & " [Режим не существует]"
+            sheetTrans.Cells(GlobalRowTrans, 1).Value = RegimeName & " [Р РµР¶РёРј РЅРµ СЃРѕС€РµР»СЃСЏ]"
             sheetTrans.Cells(GlobalRowTrans, 1).Interior.Color = RGB(200,0,0)
             sheetTrans.Cells(GlobalRowTrans, 1).Font.Color = RGB(255,255,255)
             GlobalRowTrans = GlobalRowTrans + 1
 
-            sheetPowerLines.Cells(GlobalRowPowerLines, 1).Value = RegimeName & " [Режим не существует]"
+            sheetPowerLines.Cells(GlobalRowPowerLines, 1).Value = RegimeName & " [Р РµР¶РёРј РЅРµ СЃРѕС€РµР»СЃСЏ]"
             sheetPowerLines.Cells(GlobalRowPowerLines, 1).Interior.Color = RGB(200,0,0)
             sheetPowerLines.Cells(GlobalRowPowerLines, 1).Font.Color = RGB(255,255,255)
             GlobalRowPowerLines = GlobalRowPowerLines + 1
 
-            sheetPowerTrans.Cells(GlobalRowPowerTrans, 1).Value = RegimeName & " [Режим не существует]"
+            sheetPowerTrans.Cells(GlobalRowPowerTrans, 1).Value = RegimeName & " [Р РµР¶РёРј РЅРµ СЃРѕС€РµР»СЃСЏ]"
             sheetPowerTrans.Cells(GlobalRowPowerTrans, 1).Interior.Color = RGB(200,0,0)
             sheetPowerTrans.Cells(GlobalRowPowerTrans, 1).Font.Color = RGB(255,255,255)
             GlobalRowPowerTrans = GlobalRowPowerTrans + 1
         Else
-            ' === Лист "Напряжение в узлах" ===
+            ' === Р›РёСЃС‚ "РќР°РїСЂСЏР¶РµРЅРёСЏ РІ СѓР·Р»Р°С…" ===
             sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName
             col = 2
             for i = 0 to NodeCount-1
@@ -525,7 +524,7 @@ Sub DoRgm(STitle, OutageTitle)
                     sheetNodes.Cells(GlobalRowNodes, col+2).Value = Round(Vmin,2)
                     sheetNodes.Cells(GlobalRowNodes, col+3).Value = Round(Vmax,2)
 
-                    ' Подсветка нарушений
+                    ' Р’С‹РґРµР»РµРЅРёРµ РЅР°СЂСѓС€РµРЅРёР№
                     if V > Vmax OR V < Vmin Then
                         sheetNodes.Cells(GlobalRowNodes, col).Interior.Color = RGB(200,0,0)
                         sheetNodes.Cells(GlobalRowNodes, col).Font.Color = RGB(255,255,255)
@@ -537,7 +536,7 @@ Sub DoRgm(STitle, OutageTitle)
             next
             GlobalRowNodes = GlobalRowNodes + 1
 
-            ' === Лист "Токи по линиям" с напряжениями ===
+            ' === Р›РёСЃС‚ "РўРѕРєРё РїРѕ Р»РёРЅРёСЏРј" СЃ РЅР°РїСЂСЏР¶РµРЅРёСЏРјРё ===
             sheetLines.Cells(GlobalRowLines, 1).Value = RegimeName
             col = 2
             for i = 0 to LineCount-1
@@ -562,7 +561,7 @@ Sub DoRgm(STitle, OutageTitle)
             next
             GlobalRowLines = GlobalRowLines + 1
 
-            ' === Лист "Токи по трансформаторам" ===
+            ' === Р›РёСЃС‚ "РўРѕРєРё РїРѕ С‚СЂР°РЅСЃС„РѕСЂРјР°С‚РѕСЂР°Рј" ===
             sheetTrans.Cells(GlobalRowTrans, 1).Value = RegimeName
             col = 2
             for i = 0 to TransCount-1
@@ -583,34 +582,11 @@ Sub DoRgm(STitle, OutageTitle)
             next
             GlobalRowTrans = GlobalRowTrans + 1
 
-            ' === Лист "Мощность по линиям" ===
+            ' === Р›РёСЃС‚ "РњРѕС‰РЅРѕСЃС‚Рё РїРѕ Р»РёРЅРёСЏРј" ===
             sheetPowerLines.Cells(GlobalRowPowerLines, 1).Value = RegimeName
             col = 2
             for i = 0 to LineCount-1
                 ndx = LineIndexes(i)
-                Sle = spBranchSle.Z(ndx)
-                Slb = spBranchSlb.Z(ndx)
-                PlIp = spBranchPlIp.Z(ndx)
-                PlIq = spBranchPlIq.Z(ndx)
-                QlIp = spBranchQlIp.Z(ndx)
-                QlIq = spBranchQlIq.Z(ndx)
-
-                sheetPowerLines.Cells(GlobalRowPowerLines, col).Value = Sle
-                sheetPowerLines.Cells(GlobalRowPowerLines, col+1).Value = Slb
-                sheetPowerLines.Cells(GlobalRowPowerLines, col+2).Value = Round(PlIp,2)
-                sheetPowerLines.Cells(GlobalRowPowerLines, col+3).Value = Round(PlIq,2)
-                sheetPowerLines.Cells(GlobalRowPowerLines, col+4).Value = Round(QlIp,2)
-                sheetPowerLines.Cells(GlobalRowPowerLines, col+5).Value = Round(QlIq,2)
-
-                col = col + 6
-            next
-            GlobalRowPowerLines = GlobalRowPowerLines + 1
-
-            ' === Лист "Мощность по трансформаторам" ===
-            sheetPowerTrans.Cells(GlobalRowPowerTrans, 1).Value = RegimeName
-            col = 2
-            for i = 0 to TransCount-1
-                ndx = TransIndexes(i)
                 Sle = spBranchSle.Z(ndx)
                 Slb = spBranchSlb.Z(ndx)
                 PlIp = spBranchPlIp.Z(ndx)
@@ -635,14 +611,14 @@ End Sub
 Sub PlaceOutages(byref V, SCounter, SType)
     Dim OutComb()
     
-    ' Важно: восстанавливаем топологию перед применением нового состояния
+    ' РџРµСЂРµРґ СЂР°СЃС‡РµС‚РѕРј: РІРѕСЃСЃС‚Р°РЅР°РІР»РёРІР°РµРј РёСЃС…РѕРґРЅРѕРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РїРµСЂРµРґ РїСЂРёРјРµРЅРµРЅРёРµРј СЂРµР¶РёРјР°
     TopologyRestore
     
     Title = PlaceS(V, SCounter, SType)
     DoRgm Title, ""
     TopologyRestore
 
-    ' Проверка наличия аварийных отключений
+    ' РџСЂРѕРІРµСЂРєР° РЅР°Р»РёС‡РёСЏ РІРѕР·РјРѕР¶РЅС‹С… РѕС‚РєР»СЋС‡РµРЅРёР№
     if UBound(OutageIndexes) < 0 Then Exit Sub
 
     for OutOff = MaxOutage_count to MaxOutage
@@ -674,7 +650,7 @@ Sub PlaceOutages(byref V, SCounter, SType)
     next
 End Sub
 
-' === Основной цикл расчётов ===
+' === РћРЎРќРћР’РќРћР™ Р¦РРљР› Р РђРЎР§Р•РўРћР’ ===
 
 if UBound(SIndexes) >= 0 And MaxS > UBound(SIndexes) Then
     MaxS = UBound(SIndexes)
@@ -683,10 +659,10 @@ if UBound(OutageIndexes) >= 0 And MaxOutage > UBound(OutageIndexes) Then
     MaxOutage = UBound(OutageIndexes)
 End If
 
-' Нормальная схема
+' РќРѕСЂРјР°Р»СЊРЅС‹Р№ СЂРµР¶РёРј
 DoRgm "", ""
 
-' Расчёты с односторонними отключениями
+' РџРµСЂРµС…РѕРґ Рє СЂРµРјРѕРЅС‚РёСЂСѓРµРјС‹Рј РѕР±РѕСЂСѓРґРѕРІР°РЅРёСЏРј
 if UBound(SIndexes) >= 0 Then
     Dim SComb_Array()
     for SOff = MaxS_count to MaxS
@@ -694,36 +670,31 @@ if UBound(SIndexes) >= 0 Then
 
         if SComb.Init(SIndexes, SOff, UBound(SIndexes) + 1) Then
             if SComb.FirstCombination(SComb_Array) Then
-                ' Для каждой комбинации делаем 3 варианта: sta=2, sta=4, sta=5
+                ' Р”Р»СЏ РєР°Р¶РґРѕР№ РєРѕРјР±РёРЅР°С†РёРё С‚РѕР»СЊРєРѕ 2 РІР°СЂРёР°РЅС‚Р°: sta=2, sta=3
                 do
-                    ' sta = 2 (обе стороны отключены)
+                    ' sta = 2 (РѕС‚РєР»СЋС‡РµРЅРѕ СЃРѕ СЃС‚РѕСЂРѕРЅС‹ ip)
                     PlaceOutages SComb_Array, SOff, 2
                     
-                    ' sta = 4 (отключена от начала)
-                    PlaceOutages SComb_Array, SOff, 4
-                    
-                    ' sta = 5 (отключена от конца)
-                    PlaceOutages SComb_Array, SOff, 5
+                    ' sta = 3 (РѕС‚РєР»СЋС‡РµРЅРѕ СЃРѕ СЃС‚РѕСЂРѕРЅС‹ iq)
+                    PlaceOutages SComb_Array, SOff, 3
                 loop while SComb.NextCombination(SComb_Array)
                 
-                ' Последняя комбинация
+                ' РџРѕСЃР»РµРґРЅСЏСЏ РєРѕРјР±РёРЅР°С†РёСЏ
                 PlaceOutages SComb_Array, SOff, 2
-                PlaceOutages SComb_Array, SOff, 4
-                PlaceOutages SComb_Array, SOff, 5
+                PlaceOutages SComb_Array, SOff, 3
             Else
                 PlaceOutages SComb_Array, SOff, 2
-                PlaceOutages SComb_Array, SOff, 4
-                PlaceOutages SComb_Array, SOff, 5
+                PlaceOutages SComb_Array, SOff, 3
             End If
         End If
     next
 End If
 
-' Автоподбор ширины столбцов
+' РђРІС‚РѕС„РёС‚С‚РёРЅРі С€РёСЂРёРЅС‹ СЃС‚РѕР»Р±С†РѕРІ
 sheetNodes.Columns.AutoFit
 sheetLines.Columns.AutoFit
 sheetTrans.Columns.AutoFit
 sheetPowerLines.Columns.AutoFit
 sheetPowerTrans.Columns.AutoFit
 
-MsgBox "Расчёт завершён! Результаты сохранены на 5 листах Excel.", vbInformation, "Вариантные расчеты" 
+MsgBox "Р Р°СЃС‡РµС‚ Р·Р°РІРµСЂС€РµРЅ! Р РµР·СѓР»СЊС‚Р°С‚С‹ РІС‹РіСЂСѓР¶РµРЅС‹ РЅР° 5 Р»РёСЃС‚РѕРІ Excel.", vbInformation, "Р—Р°РІРµСЂС€РµРЅРёРµ СЂР°СЃС‡РµС‚Р°"p = spBranchPlIp.Z(ndx)
