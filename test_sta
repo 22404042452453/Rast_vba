@@ -9,6 +9,9 @@ PrepareTemplate
 Set spBranchNm = spBranch.Cols("name")
 Set spBranchSta = spBranch.Cols("sta")
 
+' Поля узлов
+Set spNodeSta = spNode.Cols("sta")
+
 Set spExcel = CreateObject("Excel.Application")
 spExcel.SheetsInNewWorkbook = 1
 spExcel.Workbooks.Add
@@ -38,7 +41,6 @@ wend
 
 if BranchCount = 0 Then
     MsgBox "Нет ветвей с галочкой 'Одностор. откл'", vbExclamation, "Тест sta"
-    Exit Sub
 End If
 
 ReDim Preserve SIndexes(BranchCount-1)
