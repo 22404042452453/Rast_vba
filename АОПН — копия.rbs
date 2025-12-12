@@ -446,7 +446,7 @@ function PlaceS(byref V, SCounter, SType)
         STypeStr = ""
         if SType = 2 Then STypeStr = "отключена с одного конца"
         if SType = 4 Then STypeStr = "отключена со стороны начала"
-        if SType = 5 Then STypeStr = "отключена со стороны конца"
+        if SType = 3 Then STypeStr = "отключена со стороны конца"
         SList = SList + Cstr(spBranchNm.ZS(V(sc))) + " " + STypeStr
     next
     PlaceS = SList
@@ -701,18 +701,18 @@ if UBound(SIndexes) >= 0 Then
                     ' sta = 4 (отключена со стороны начала)
                     PlaceOutages SComb_Array, SOff, 4
 
-                    ' sta = 5 (отключена со стороны конца)
-                    PlaceOutages SComb_Array, SOff, 5
+                    ' sta = 3 (отключена со стороны конца)
+                    PlaceOutages SComb_Array, SOff, 3
                 loop while SComb.NextCombination(SComb_Array)
 
                 ' Последняя комбинация
                 PlaceOutages SComb_Array, SOff, 2
                 PlaceOutages SComb_Array, SOff, 4
-                PlaceOutages SComb_Array, SOff, 5
+                PlaceOutages SComb_Array, SOff, 3
             Else
                 PlaceOutages SComb_Array, SOff, 2
                 PlaceOutages SComb_Array, SOff, 4
-                PlaceOutages SComb_Array, SOff, 5
+                PlaceOutages SComb_Array, SOff, 3
             End If
         End If
     next
