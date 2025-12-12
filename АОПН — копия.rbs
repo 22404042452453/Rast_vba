@@ -438,15 +438,15 @@ function PlaceOffs(byref V, OffCounter)
     PlaceOffs = OffList
 End function
 
-' Функция для одностороннего отключения (изменяем sta на 4 или 5)
+' Функция для одностороннего отключения (изменяем sta на 2 или 3)
 function PlaceS(byref V, SCounter, SType)
     SList = ""
     for sc = 0 to SCounter-1
-        spBranchSta.Z(V(sc)) = SType ' 4 или 5
+        spBranchSta.Z(V(sc)) = SType ' 2 или 3
         if sc > 0 Then SList = SList + " | "
         STypeStr = ""
-        if SType = 4 Then STypeStr = "(от начала)"
-        if SType = 5 Then STypeStr = "(от конца)"
+        if SType = 2 Then STypeStr = "(от начала)"
+        if SType = 3 Then STypeStr = "(от конца)"
         SList = SList + Cstr(spBranchNm.ZS(V(sc))) + " " + STypeStr
     next
     PlaceS = SList
@@ -693,21 +693,21 @@ if UBound(SIndexes) >= 0 Then
 
         if SComb.Init(SIndexes, SOff, UBound(SIndexes) + 1) Then
             if SComb.FirstCombination(SComb_Array) Then
-                ' Для каждой комбинации делаем 2 варианта: sta=4, sta=5
+                ' Для каждой комбинации делаем 2 варианта: sta=2, sta=3
                 do
-                    ' sta = 4 (отключена от начала)
-                    PlaceOutages SComb_Array, SOff, 4
+                    ' sta = 2 (отключена от начала)
+                    PlaceOutages SComb_Array, SOff, 2
 
-                    ' sta = 5 (отключена от конца)
-                    PlaceOutages SComb_Array, SOff, 5
+                    ' sta = 3 (отключена от конца)
+                    PlaceOutages SComb_Array, SOff, 3
                 loop while SComb.NextCombination(SComb_Array)
 
                 ' Последняя комбинация
-                PlaceOutages SComb_Array, SOff, 4
-                PlaceOutages SComb_Array, SOff, 5
+                PlaceOutages SComb_Array, SOff, 2
+                PlaceOutages SComb_Array, SOff, 3
             Else
-                PlaceOutages SComb_Array, SOff, 4
-                PlaceOutages SComb_Array, SOff, 5
+                PlaceOutages SComb_Array, SOff, 2
+                PlaceOutages SComb_Array, SOff, 3
             End If
         End If
     next
