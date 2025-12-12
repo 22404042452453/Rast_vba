@@ -82,8 +82,7 @@ class Uniquizer
         ndx = spBranch.FindNextSel(-1)
         OutagePrint = ""
         while ndx >= 0
-            OutagePrint = OutagePrint + CStr(ndx)
-            OutagePrint = OutagePrint + ";"
+            OutagePrint = OutagePrint + CStr(ndx) + ":" + CStr(spBranchSta.Z(ndx)) + ";"
             ndx = spBranch.FindNextSel(ndx)
         wend
 
