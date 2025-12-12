@@ -66,6 +66,8 @@ for i = 0 to BranchCount-1
             statusText = "Не сошелся"
         End If
 
+        MsgBox "Ветвь: " & branchName & vbCrLf & "sta: " & staCode & vbCrLf & "Статус: " & statusText, vbInformation, "Тест sta"
+
         sheetTest.Cells(row,1).Value = branchName
         sheetTest.Cells(row,2).Value = staCode
         sheetTest.Cells(row,3).Value = statusText
