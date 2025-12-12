@@ -425,11 +425,11 @@ End Sub
 function PlaceOffs(byref V, OffCounter)
     OffList = ""
     for offc = 0 to OffCounter-1
-        spBranchSta.Z(V(offc)) = 2
+        spBranchSta.Z(V(offc)) = 1
         GroupId = spBranchGrp.Z(V(offc))
         if GroupId > 0 Then
             spBranch.SetSel "groupid=" & CStr(GroupId)
-            spBranchSta.Calc 2
+            spBranchSta.Calc 1
             spBranch.SetSel ""
         End If
         if offc > 0 Then OffList = OffList + " | "
