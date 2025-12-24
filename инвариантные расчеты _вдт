@@ -27,6 +27,7 @@ Set spBranchD_ip = spBranch.Cols("d_ip")
 Set spBranchD_iq = spBranch.Cols("d_iq")
 Set spBranchX = spBranch.Cols("x")
 Set spBranchKtr = spBranch.Cols("ktr")
+Set spBranchKti = spBranch.Cols("kti")
 
 ' Поля узлов
 Set spNodeSta = spNode.Cols("sta")
@@ -410,21 +411,17 @@ Sub DoInvariantCalculations(RepairTitle, OutageTitle)
         ' Сохраняем исходные параметры
         OriginalX = spBranchX.Z(ndx)
         OriginalKtr = spBranchKtr.Z(ndx)
+        OriginalKti = spBranchKti.Z(ndx)
         
         ' Цикл по 18 инвариантам
         for inv = 0 to 17
             ' Устанавливаем новые параметры
             spBranchX.Z(ndx) = X_Values(inv)
-            
-            ' Кт это комплексное число, преобразуем в Ktr (модуль коэффициента трансформации)
-            ' Ktr = sqrt(Kt_Real^2 + Kt_Imag^2)
-            KtReal = Kt_Real(inv)
-            KtImag = Kt_Imag(inv)
-            NewKtr = Sqr(KtReal * KtReal + KtImag * KtImag)
-            spBranchKtr.Z(ndx) = NewKtr
+            spBranchKtr.Z(ndx) = Kt_Real(inv)
+            spBranchKti.Z(ndx) = Kt_Imag(inv)
             
             ' Формируем название варианта
-            VariantTitle = "Вариант " & CStr(inv + 1) & ": X=" & FormatNumber(X_Values(inv),1) & " Ом, Кт=" & FormatNumber(KtReal,2) & "+j" & FormatNumber(KtImag,2)
+            VariantTitle = "Вариант " & CStr(inv + 1) & ": X=" & FormatNumber(X_Values(inv),1) & " Ом, Кт=" & FormatNumber(Kt_Real(inv),2) & "+j" & FormatNumber(Kt_Imag(inv),2)
             
             ' Выполняем расчет режима
             DoRgm RepairTitle, OutageTitle, VariantTitle
@@ -433,6 +430,7 @@ Sub DoInvariantCalculations(RepairTitle, OutageTitle)
         ' Восстанавливаем исходные параметры
         spBranchX.Z(ndx) = OriginalX
         spBranchKtr.Z(ndx) = OriginalKtr
+        spBranchKti.Z(ndx) = OriginalKti
     End If
 End Sub
 
