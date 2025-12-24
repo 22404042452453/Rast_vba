@@ -406,24 +406,20 @@ Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
     End If
 End Sub
 
-Sub DoInvariantCalculations(RepairTitle, OutageTitle)
-    ' Находим ветвь с флагом ВДТ
-    Dim vdtNdx
-    spBranch.SetSel("ВДТ")
-    vdtNdx = spBranch.FindNextSel(0)
-    
-    if vdtNdx >= 0 Then
+Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex)
+    ' Проверяем, что передан корректный индекс ветви ВДТ
+    if vdtBranchIndex >= 0 Then
         ' Сохраняем исходные параметры
-        OriginalX = spBranchX.Z(vdtNdx)
-        OriginalKtr = spBranchKtr.Z(vdtNdx)
-        OriginalKti = spBranchKti.Z(vdtNdx)
+        OriginalX = spBranchX.Z(vdtBranchIndex)
+        OriginalKtr = spBranchKtr.Z(vdtBranchIndex)
+        OriginalKti = spBranchKti.Z(vdtBranchIndex)
         
         ' Цикл по 18 инвариантам
         for inv = 0 to 17
             ' Устанавливаем новые параметры
-            spBranchX.Z(vdtNdx) = X_Values(inv)
-            spBranchKtr.Z(vdtNdx) = Kt_Real(inv)
-            spBranchKti.Z(vdtNdx) = Kt_Imag(inv)
+            spBranchX.Z(vdtBranchIndex) = X_Values(inv)
+            spBranchKtr.Z(vdtBranchIndex) = Kt_Real(inv)
+            spBranchKti.Z(vdtBranchIndex) = Kt_Imag(inv)
             
             ' Формируем название варианта
             VariantTitle = "Вариант " & CStr(inv + 1) & ": X=" & FormatNumber(X_Values(inv),1) & " Ом, Кт=" & FormatNumber(Kt_Real(inv),2) & "+j" & FormatNumber(Kt_Imag(inv),2)
@@ -433,9 +429,9 @@ Sub DoInvariantCalculations(RepairTitle, OutageTitle)
         next
         
         ' Восстанавливаем исходные параметры
-        spBranchX.Z(vdtNdx) = OriginalX
-        spBranchKtr.Z(vdtNdx) = OriginalKtr
-        spBranchKti.Z(vdtNdx) = OriginalKti
+        spBranchX.Z(vdtBranchIndex) = OriginalX
+        spBranchKtr.Z(vdtBranchIndex) = OriginalKtr
+        spBranchKti.Z(vdtBranchIndex) = OriginalKti
     End If
 End Sub
 
@@ -449,7 +445,7 @@ DoRgm "", "", ""
 spBranch.SetSel("ВДТ")
 VdtIndex = spBranch.FindNextSel(0)
 if VdtIndex >= 0 Then
-    DoInvariantCalculations "", ""
+    DoInvariantCalculations "", "", VdtIndex
 End If
 
 ' 2. ЦИКЛ ПО РЕМОНТАМ
@@ -468,7 +464,7 @@ if RepairBranchCount > 0 Then
                 
                 ' Инвариантные расчеты для ремонта
                 if VdtIndex >= 0 Then
-                    DoInvariantCalculations RepairTitle, ""
+                    DoInvariantCalculations RepairTitle, "", VdtIndex
                 End If
                 
                 ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
@@ -488,7 +484,7 @@ if RepairBranchCount > 0 Then
                                 
                                 ' Инвариантные расчеты для ремонта + отключения
                                 if VdtIndex >= 0 Then
-                                    DoInvariantCalculations RepairTitle, OutageTitle
+                                    DoInvariantCalculations RepairTitle, OutageTitle, VdtIndex
                                 End If
                                 
                                 HasMoreOutage = OutageComb.NextCombination(OutageV)
