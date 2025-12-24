@@ -408,21 +408,22 @@ End Sub
 
 Sub DoInvariantCalculations(RepairTitle, OutageTitle)
     ' Находим ветвь с флагом ВДТ
+    Dim vdtNdx
     spBranch.SetSel("ВДТ")
-    ndx = spBranch.FindNextSel(0)
+    vdtNdx = spBranch.FindNextSel(0)
     
-    if ndx >= 0 Then
+    if vdtNdx >= 0 Then
         ' Сохраняем исходные параметры
-        OriginalX = spBranchX.Z(ndx)
-        OriginalKtr = spBranchKtr.Z(ndx)
-        OriginalKti = spBranchKti.Z(ndx)
+        OriginalX = spBranchX.Z(vdtNdx)
+        OriginalKtr = spBranchKtr.Z(vdtNdx)
+        OriginalKti = spBranchKti.Z(vdtNdx)
         
         ' Цикл по 18 инвариантам
         for inv = 0 to 17
             ' Устанавливаем новые параметры
-            spBranchX.Z(ndx) = X_Values(inv)
-            spBranchKtr.Z(ndx) = Kt_Real(inv)
-            spBranchKti.Z(ndx) = Kt_Imag(inv)
+            spBranchX.Z(vdtNdx) = X_Values(inv)
+            spBranchKtr.Z(vdtNdx) = Kt_Real(inv)
+            spBranchKti.Z(vdtNdx) = Kt_Imag(inv)
             
             ' Формируем название варианта
             VariantTitle = "Вариант " & CStr(inv + 1) & ": X=" & FormatNumber(X_Values(inv),1) & " Ом, Кт=" & FormatNumber(Kt_Real(inv),2) & "+j" & FormatNumber(Kt_Imag(inv),2)
@@ -432,9 +433,9 @@ Sub DoInvariantCalculations(RepairTitle, OutageTitle)
         next
         
         ' Восстанавливаем исходные параметры
-        spBranchX.Z(ndx) = OriginalX
-        spBranchKtr.Z(ndx) = OriginalKtr
-        spBranchKti.Z(ndx) = OriginalKti
+        spBranchX.Z(vdtNdx) = OriginalX
+        spBranchKtr.Z(vdtNdx) = OriginalKtr
+        spBranchKti.Z(vdtNdx) = OriginalKti
     End If
 End Sub
 
