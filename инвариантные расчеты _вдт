@@ -67,7 +67,7 @@ Set spStoredOutages = CreateObject("Scripting.Dictionary")
 class Uniquizer
     public function ReadOutage
         spBranch.SetSel("sta")
-        ndx = spBranch.FindNextSel(-1)
+        ndx = spBranch.FindNextSel(0)
         OutagePrint = ""
         while ndx >= 0
             OutagePrint = OutagePrint + CStr(ndx)
@@ -102,7 +102,7 @@ Dim NodeIndexes()
 spBranch.SetSel("Report")
 ReDim BranchIndexes(spBranch.Count-1)
 BranchCount = 0
-ndx = spBranch.FindNextSel(-1)
+ndx = spBranch.FindNextSel(0)
 while ndx >= 0
     BranchIndexes(BranchCount) = ndx
     BranchCount = BranchCount + 1
@@ -114,7 +114,7 @@ ReDim Preserve BranchIndexes(BranchCount-1)
 spNode.SetSel("sel")
 ReDim NodeIndexes(spNode.Count-1)
 NodeCount = 0
-ndx = spNode.FindNextSel(-1)
+ndx = spNode.FindNextSel(0)
 while ndx >= 0
     NodeIndexes(NodeCount) = ndx
     ndx = spNode.FindNextSel(ndx)
@@ -127,7 +127,7 @@ Dim RepairIndexes()
 spBranch.SetSel("Repair")
 ReDim RepairIndexes(spBranch.Count-1)
 RepairBranchCount = 0
-ndx = spBranch.FindNextSel(-1)
+ndx = spBranch.FindNextSel(0)
 while ndx >= 0
     RepairIndexes(RepairBranchCount) = ndx
     RepairBranchCount = RepairBranchCount + 1
@@ -138,7 +138,7 @@ Dim OutageIndexes()
 spBranch.SetSel("Outage")
 ReDim OutageIndexes(spBranch.Count-1)
 OutageBranchCount = 0
-ndx = spBranch.FindNextSel(-1)
+ndx = spBranch.FindNextSel(0)
 while ndx >= 0
     OutageIndexes(OutageBranchCount) = ndx
     OutageBranchCount = OutageBranchCount + 1
@@ -409,7 +409,7 @@ End Sub
 Sub DoInvariantCalculations(RepairTitle, OutageTitle)
     ' Находим ветвь с флагом ВДТ
     spBranch.SetSel("ВДТ")
-    ndx = spBranch.FindNextSel(-1)
+    ndx = spBranch.FindNextSel(0)
     
     if ndx >= 0 Then
         ' Сохраняем исходные параметры
@@ -446,7 +446,7 @@ DoRgm "", "", ""
 
 ' Проверяем наличие ВДТ для инвариантов в нормальной схеме
 spBranch.SetSel("ВДТ")
-VdtIndex = spBranch.FindNextSel(-1)
+VdtIndex = spBranch.FindNextSel(0)
 if VdtIndex >= 0 Then
     DoInvariantCalculations "", ""
 End If
