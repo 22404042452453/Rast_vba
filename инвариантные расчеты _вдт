@@ -133,9 +133,6 @@ while ndx >= 0
     RepairBranchCount = RepairBranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 wend
-if RepairBranchCount > 0 Then
-    ReDim Preserve RepairIndexes(RepairBranchCount-1)
-End If
 
 Dim OutageIndexes()
 spBranch.SetSel("Outage")
@@ -147,9 +144,6 @@ while ndx >= 0
     OutageBranchCount = OutageBranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 wend
-if OutageBranchCount > 0 Then
-    ReDim Preserve OutageIndexes(OutageBranchCount-1)
-End If
 
 ' === Формируем шапки таблиц ===
 
@@ -316,15 +310,17 @@ End Sub
 function PlaceOffs(byref V, OffCounter)
     OffList = ""
     for offc = 0 to OffCounter-1
-        spBranchSta.Z(V(offc)) = 1
-        GroupId = spBranchGrp.Z(V(offc))
-        if GroupId > 0 Then
-            spBranch.SetSel "groupid=" & CStr(GroupId)
-            spBranchSta.Calc 1
-            spBranch.SetSel ""
+        if V(offc) >= 0 Then
+            spBranchSta.Z(V(offc)) = 1
+            GroupId = spBranchGrp.Z(V(offc))
+            if GroupId > 0 Then
+                spBranch.SetSel "groupid=" & CStr(GroupId)
+                spBranchSta.Calc 1
+                spBranch.SetSel ""
+            End If
+            if offc > 0 Then OffList = OffList + " | "
+            OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
         End If
-        if offc > 0 Then OffList = OffList + " | "
-        OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
     next
     PlaceOffs = OffList
 End function
@@ -456,51 +452,55 @@ if VdtIndex >= 0 Then
 End If
 
 ' 2. ЦИКЛ ПО РЕМОНТАМ
-for RepairCount = 1 to MaxRepair_count
-    if RepairBranchCount > 0 and RepairComb.Init(RepairIndexes, RepairCount, RepairBranchCount) Then
-        Dim RepairV()
-        HasMore = RepairComb.FirstCombination(RepairV)
-        
-        Do
-            TopologyRestore
-            RepairTitle = PlaceOffs(RepairV, RepairCount)
+if RepairBranchCount > 0 Then
+    for RepairCount = 1 to MaxRepair_count
+        if RepairComb.Init(RepairIndexes, RepairCount, RepairBranchCount) Then
+            Dim RepairV()
+            HasMore = RepairComb.FirstCombination(RepairV)
             
-            ' Обычный расчет для ремонта
-            DoRgm RepairTitle, "", ""
-            
-            ' Инвариантные расчеты для ремонта
-            if VdtIndex >= 0 Then
-                DoInvariantCalculations RepairTitle, ""
-            End If
-            
-            ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
-            for OutageCount = 1 to MaxOutage_count
-                if OutageBranchCount > 0 and OutageComb.Init(OutageIndexes, OutageCount, OutageBranchCount) Then
-                    Dim OutageV()
-                    HasMoreOutage = OutageComb.FirstCombination(OutageV)
-                    
-                    Do
-                        TopologyRestore
-                        PlaceOffs RepairV, RepairCount
-                        OutageTitle = PlaceOffs(OutageV, OutageCount)
-                        
-                        ' Обычный расчет для ремонта + отключения
-                        DoRgm RepairTitle, OutageTitle, ""
-                        
-                        ' Инвариантные расчеты для ремонта + отключения
-                        if VdtIndex >= 0 Then
-                            DoInvariantCalculations RepairTitle, OutageTitle
-                        End If
-                        
-                        HasMoreOutage = OutageComb.NextCombination(OutageV)
-                    Loop While HasMoreOutage
+            Do
+                TopologyRestore
+                RepairTitle = PlaceOffs(RepairV, RepairCount)
+                
+                ' Обычный расчет для ремонта
+                DoRgm RepairTitle, "", ""
+                
+                ' Инвариантные расчеты для ремонта
+                if VdtIndex >= 0 Then
+                    DoInvariantCalculations RepairTitle, ""
                 End If
-            next
-            
-            HasMore = RepairComb.NextCombination(RepairV)
-        Loop While HasMore
-    End If
-next
+                
+                ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
+                if OutageBranchCount > 0 Then
+                    for OutageCount = 1 to MaxOutage_count
+                        if OutageComb.Init(OutageIndexes, OutageCount, OutageBranchCount) Then
+                            Dim OutageV()
+                            HasMoreOutage = OutageComb.FirstCombination(OutageV)
+                            
+                            Do
+                                TopologyRestore
+                                PlaceOffs RepairV, RepairCount
+                                OutageTitle = PlaceOffs(OutageV, OutageCount)
+                                
+                                ' Обычный расчет для ремонта + отключения
+                                DoRgm RepairTitle, OutageTitle, ""
+                                
+                                ' Инвариантные расчеты для ремонта + отключения
+                                if VdtIndex >= 0 Then
+                                    DoInvariantCalculations RepairTitle, OutageTitle
+                                End If
+                                
+                                HasMoreOutage = OutageComb.NextCombination(OutageV)
+                            Loop While HasMoreOutage
+                        End If
+                    next
+                End If
+                
+                HasMore = RepairComb.NextCombination(RepairV)
+            Loop While HasMore
+        End If
+    next
+End If
 
 ' Автоподбор ширины столбцов
 sheetNodes.Cells.EntireColumn.AutoFit
