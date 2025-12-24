@@ -108,6 +108,7 @@ while ndx >= 0
     BranchCount = BranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 wend
+ReDim Preserve BranchIndexes(BranchCount-1)
 
 ' Собираем контролируемые узлы
 spNode.SetSel("sel")
@@ -119,29 +120,36 @@ while ndx >= 0
     ndx = spNode.FindNextSel(ndx)
     NodeCount = NodeCount + 1
 wend
+ReDim Preserve NodeIndexes(NodeCount-1)
 
 ' Собираем индексы для ремонтов и отключений
 Dim RepairIndexes()
 spBranch.SetSel("Repair")
-ReDim RepairIndexes(spBranch.Count)
-BranchCount = 0
+ReDim RepairIndexes(spBranch.Count-1)
+RepairBranchCount = 0
 ndx = spBranch.FindNextSel(-1)
 while ndx >= 0
-    RepairIndexes(BranchCount) = ndx
-    BranchCount = BranchCount + 1
+    RepairIndexes(RepairBranchCount) = ndx
+    RepairBranchCount = RepairBranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 wend
+if RepairBranchCount > 0 Then
+    ReDim Preserve RepairIndexes(RepairBranchCount-1)
+End If
 
 Dim OutageIndexes()
 spBranch.SetSel("Outage")
-ReDim OutageIndexes(spBranch.Count)
-BranchCount = 0
+ReDim OutageIndexes(spBranch.Count-1)
+OutageBranchCount = 0
 ndx = spBranch.FindNextSel(-1)
 while ndx >= 0
-    OutageIndexes(BranchCount) = ndx
-    BranchCount = BranchCount + 1
+    OutageIndexes(OutageBranchCount) = ndx
+    OutageBranchCount = OutageBranchCount + 1
     ndx = spBranch.FindNextSel(ndx)
 wend
+if OutageBranchCount > 0 Then
+    ReDim Preserve OutageIndexes(OutageBranchCount-1)
+End If
 
 ' === Формируем шапки таблиц ===
 
@@ -165,7 +173,7 @@ sheetNodes.Cells(2,1).Value = ""
 
 ' Шапка для ветвей
 col = 2
-for i = 0 to UBound(BranchIndexes)
+for i = 0 to BranchCount-1
     ndx = BranchIndexes(i)
     branchName = spBranchNm.ZS(ndx)
     sheetBranches.Range(sheetBranches.Cells(1,col), sheetBranches.Cells(1,col+3)).Merge
@@ -383,7 +391,7 @@ Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
             ' === Лист "Ветви" ===
             sheetBranches.Cells(GlobalRowBranches, 1).Value = RegimeName
             col = 2
-            for i = 0 to UBound(BranchIndexes)
+            for i = 0 to BranchCount-1
                 ndx = BranchIndexes(i)
                 Imax = spBranchImax.Z(ndx) * 1000
                 Plmax = spBranchPlmax.Z(ndx)
@@ -449,7 +457,7 @@ End If
 
 ' 2. ЦИКЛ ПО РЕМОНТАМ
 for RepairCount = 1 to MaxRepair_count
-    if RepairComb.Init(RepairIndexes, RepairCount, UBound(RepairIndexes) + 1) Then
+    if RepairBranchCount > 0 and RepairComb.Init(RepairIndexes, RepairCount, RepairBranchCount) Then
         Dim RepairV()
         HasMore = RepairComb.FirstCombination(RepairV)
         
@@ -467,7 +475,7 @@ for RepairCount = 1 to MaxRepair_count
             
             ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
             for OutageCount = 1 to MaxOutage_count
-                if OutageComb.Init(OutageIndexes, OutageCount, UBound(OutageIndexes) + 1) Then
+                if OutageBranchCount > 0 and OutageComb.Init(OutageIndexes, OutageCount, OutageBranchCount) Then
                     Dim OutageV()
                     HasMoreOutage = OutageComb.FirstCombination(OutageV)
                     
