@@ -97,6 +97,7 @@ TopologyStore
 ' Массивы индексов элементов
 Dim BranchIndexes()
 Dim NodeIndexes()
+Dim VdtIndex
 
 ' Собираем все контролируемые ветви
 spBranch.SetSel("Report")
@@ -437,13 +438,17 @@ End Sub
 
 ' ============= ОСНОВНОЙ ЦИКЛ РАСЧЕТОВ =============
 
+' Инициализируем индекс ВДТ
+VdtIndex = -1
+
+' Проверяем наличие ВДТ для инвариантных расчетов
+spBranch.SetSel("ВДТ")
+VdtIndex = spBranch.FindNextSel(0)
+
 ' 1. НОРМАЛЬНАЯ СХЕМА
 TopologyRestore
 DoRgm "", "", ""
 
-' Проверяем наличие ВДТ для инвариантов в нормальной схеме
-spBranch.SetSel("ВДТ")
-VdtIndex = spBranch.FindNextSel(0)
 if VdtIndex >= 0 Then
     DoInvariantCalculations "", "", VdtIndex
 End If
