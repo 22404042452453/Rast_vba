@@ -1,0 +1,503 @@
+MaxRepair = 1
+MaxRepair_count = 1
+MaxOutage = 1
+MaxOutage_count = 1
+
+Set spBranch = Rastr.Tables("vetv")
+Set spNode = Rastr.Tables("node")
+
+PrepareTemplate
+
+' Поля ветвей
+Set spBranchIp = spBranch.Cols("ip")
+Set spBranchIq = spBranch.Cols("iq")
+Set spBranchNa = spBranch.Cols("na")
+Set spBranchNm = spBranch.Cols("name")
+Set spBranchSta = spBranch.Cols("sta")
+Set spBranchSel = spBranch.Cols("Report")
+Set spBranchSmx = spBranch.Cols("slmax")
+Set spBranchImax = spBranch.Cols("i_max")
+Set spBranchIl = spBranch.Cols("zag_it")
+Set spBranchIpr = spBranch.Cols("i_dop_r")
+Set spBranchGrp = spBranch.Cols("groupid")
+Set spBranchSrt = spBranch.Cols("_SortKey")
+Set spBranchTip = spBranch.Cols("tip")
+Set spBranchPlmax = spBranch.Cols("plmax")
+Set spBranchD_ip = spBranch.Cols("d_ip")
+Set spBranchD_iq = spBranch.Cols("d_iq")
+Set spBranchX = spBranch.Cols("x")
+Set spBranchKtr = spBranch.Cols("ktr")
+
+' Поля узлов
+Set spNodeSta = spNode.Cols("sta")
+Set spNodeNy = spNode.Cols("ny")
+Set spNodeName = spNode.Cols("name")
+Set spNodeUhom = spNode.Cols("uhom")
+Set spNodeUmin = spNode.Cols("umin")
+Set spNodeUmax = spNode.Cols("umax")
+Set spNodeV = spNode.Cols("vras")
+Set spNodeDelta = spNode.Cols("delta")
+
+Set spExcel = CreateObject("Excel.Application")
+spExcel.SheetsInNewWorkbook = 2
+spExcel.Workbooks.Add
+spExcel.Visible = true
+
+' Создаём листы
+Dim sheetNodes, sheetBranches
+Set sheetNodes = spExcel.Worksheets(1)
+Set sheetBranches = spExcel.Worksheets(2)
+
+sheetNodes.Name = "Узлы"
+sheetBranches.Name = "Ветви"
+
+' Глобальные счётчики строк для каждого листа
+GlobalRowNodes = 3
+GlobalRowBranches = 3
+
+class UniqueOutage
+    Private Hash
+    Private OutagePrint
+    Private OutageCount
+end class
+
+Set spStoredOutages = CreateObject("Scripting.Dictionary")
+
+class Uniquizer
+    public function ReadOutage
+        spBranch.SetSel("sta")
+        ndx = spBranch.FindNextSel(-1)
+        OutagePrint = ""
+        while ndx >= 0
+            OutagePrint = OutagePrint + CStr(ndx)
+            OutagePrint = OutagePrint + ";"
+            ndx = spBranch.FindNextSel(ndx)
+        wend
+       
+        if spStoredOutages.Exists(OutagePrint) Then
+            ReadOutage = 0
+        Else
+            spStoredOutages.Add OutagePrint,1
+            ReadOutage = 1
+        End If
+    end function
+end class
+
+Set spUniquizer = new Uniquizer
+
+Dim RepairComb
+Set RepairComb = new Combinator
+
+Dim OutageComb
+Set OutageComb = new Combinator
+
+TopologyStore
+
+' Массивы индексов элементов
+Dim BranchIndexes()
+Dim NodeIndexes()
+
+' Собираем все контролируемые ветви
+spBranch.SetSel("Report")
+ReDim BranchIndexes(spBranch.Count-1)
+BranchCount = 0
+ndx = spBranch.FindNextSel(-1)
+while ndx >= 0
+    BranchIndexes(BranchCount) = ndx
+    BranchCount = BranchCount + 1
+    ndx = spBranch.FindNextSel(ndx)
+wend
+
+' Собираем контролируемые узлы
+spNode.SetSel("sel")
+ReDim NodeIndexes(spNode.Count-1)
+NodeCount = 0
+ndx = spNode.FindNextSel(-1)
+while ndx >= 0
+    NodeIndexes(NodeCount) = ndx
+    ndx = spNode.FindNextSel(ndx)
+    NodeCount = NodeCount + 1
+wend
+
+' Собираем индексы для ремонтов и отключений
+Dim RepairIndexes()
+spBranch.SetSel("Repair")
+ReDim RepairIndexes(spBranch.Count)
+BranchCount = 0
+ndx = spBranch.FindNextSel(-1)
+while ndx >= 0
+    RepairIndexes(BranchCount) = ndx
+    BranchCount = BranchCount + 1
+    ndx = spBranch.FindNextSel(ndx)
+wend
+
+Dim OutageIndexes()
+spBranch.SetSel("Outage")
+ReDim OutageIndexes(spBranch.Count)
+BranchCount = 0
+ndx = spBranch.FindNextSel(-1)
+while ndx >= 0
+    OutageIndexes(BranchCount) = ndx
+    BranchCount = BranchCount + 1
+    ndx = spBranch.FindNextSel(ndx)
+wend
+
+' === Формируем шапки таблиц ===
+
+' Шапка для узлов
+col = 2
+for i = 0 to NodeCount-1
+    ndx = NodeIndexes(i)
+    nodeName = spNodeName.ZS(ndx)
+    ' Объединяем 2 столбца для одного узла
+    sheetNodes.Range(sheetNodes.Cells(1,col), sheetNodes.Cells(1,col+1)).Merge
+    sheetNodes.Cells(1,col).Value = nodeName
+    sheetNodes.Cells(1,col).HorizontalAlignment = -4108 ' xlCenter
+   
+    sheetNodes.Cells(2,col).Value = "U, кВ"
+    sheetNodes.Cells(2,col+1).Value = "Delta, °"
+   
+    col = col + 2
+next
+sheetNodes.Cells(1,1).Value = "Режим"
+sheetNodes.Cells(2,1).Value = ""
+
+' Шапка для ветвей
+col = 2
+for i = 0 to UBound(BranchIndexes)
+    ndx = BranchIndexes(i)
+    branchName = spBranchNm.ZS(ndx)
+    sheetBranches.Range(sheetBranches.Cells(1,col), sheetBranches.Cells(1,col+3)).Merge
+    sheetBranches.Cells(1,col).Value = branchName
+    sheetBranches.Cells(1,col).HorizontalAlignment = -4108
+   
+    sheetBranches.Cells(2,col).Value = "I, А"
+    sheetBranches.Cells(2,col+1).Value = "S, МВА"
+    sheetBranches.Cells(2,col+2).Value = "Delta нач, °"
+    sheetBranches.Cells(2,col+3).Value = "Delta кон, °"
+   
+    col = col + 4
+next
+sheetBranches.Cells(1,1).Value = "Режим"
+sheetBranches.Cells(2,1).Value = ""
+
+' Данные для инвариантных расчетов
+Dim X_Values, Kt_Real, Kt_Imag
+X_Values = Array(0.0, 0.0, 0.2, 0.4, 0.7, 1.1, 1.6, 2.2, 2.9, 3.7, 4.6, 5.5, 6.6, 7.8, 8.9, 10.3, 11.7, 13.2)
+Kt_Real = Array(1.00, 1.00, 1.00, 0.99, 0.99, 0.98, 0.98, 0.97, 0.96, 0.95, 0.94, 0.92, 0.91, 0.89, 0.88, 0.86, 0.84, 0.82)
+Kt_Imag = Array(0.00, 0.04, 0.07, 0.11, 0.14, 0.18, 0.21, 0.25, 0.28, 0.32, 0.35, 0.39, 0.42, 0.45, 0.48, 0.51, 0.54, 0.57)
+
+class Combinator
+    Dim Counter()
+    Dim V()
+    Private m
+    Private n
+   
+    Private Sub Swap(byref V,i1,i2)
+        temp = V(i1)
+        V(i1) = V(i2)
+        V(i2) = temp
+    End Sub
+   
+    public function Init(Vsource,Em,En)
+        Init = True
+        m = Em
+        n = En
+        Redim V(UBound(Vsource))
+        for i = 0 to UBound(Vsource)
+            V(i) = Vsource(i)
+        next
+        if m > n Then
+            MsgBox "M>N !"
+            Init = False
+        End If
+        if Init Then
+            Redim Counter(n-1)
+            for i = 0 to Ubound(Counter)
+                Counter(i) = i
+            next
+        End If
+    end function
+   
+    public function FirstCombination(byref Vout)
+        ReDim Vout(m-1)
+        for i = 0 to m-1
+            Vout(i) = V(Counter(i))
+        next
+        FirstCombination = not ((m = n) or (m = 0))
+    end function
+   
+    public function NextCombination(byref Vout)
+        if Counter(m-1) < n - 1 Then
+            Counter(m-1) = Counter(m-1) + 1
+        Else
+            for i = m-2 to 0 step -1
+                if Counter(i) < n - m + i Then
+                    Counter(i) = Counter(i) + 1
+                    for j = i + 1 to m - 1
+                        Counter(j) = Counter(j-1) + 1
+                    next
+                    Exit For
+                End If
+            next
+        End if
+       
+        Redim Vout(m-1)
+        for i = 0 to m-1
+            Vout(i) = V(Counter(i))
+        next
+       
+        if Counter(0) = n - m Then
+            NextCombination = 0
+        Else
+            NextCombination = 1
+        End If
+    end function
+end class
+
+Sub TopologyStore
+    on error resume next
+    spNode.Cols.Add "staRes",PR_BOOL
+    spBranch.Cols.Add "staRes",PR_BOOL
+    on error goto 0
+    spNode.SetSel ""
+    spNode.Cols("staRes").Calc("sta")
+    spBranch.SetSel ""
+    spBranch.Cols("staRes").Calc("sta")
+End Sub
+
+Sub TopologyRestore
+    spNode.SetSel ""
+    spNodeSta.Calc("staRes")
+    spBranch.SetSel ""
+    spBranchSta.Calc("staRes")
+End Sub
+
+Sub PrepareTemplate
+    FieldsAdded = 0
+    if spBranch.Cols.Find("Repair") < 0 Then
+        spBranch.Cols.Add "Repair", PR_BOOL
+        spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Outage") < 0 Then
+        spBranch.Cols.Add "Outage", PR_BOOL
+        spBranch.Cols("Outage").Prop(FL_ZAG) = "Откл"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Report") < 0 Then
+        spBranch.Cols.Add "Report", PR_BOOL
+        spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("ВДТ") < 0 Then
+        spBranch.Cols.Add "ВДТ", PR_BOOL
+        spBranch.Cols("ВДТ").Prop(FL_ZAG) = "Вольт-добав тр-ра"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("_SortKey") < 0 Then
+        spBranch.Cols.Add "_SortKey", PR_INT
+    End if
+    if FieldsAdded = 1 Then
+        MsgBox "Необходимые поля добавлены. Выберите ветви и узлы, установите флаги и запустите макрос повторно.",1,"Вариантные расчеты с инвариантами"
+        WScript.Quit
+    End If
+End Sub
+
+function PlaceOffs(byref V, OffCounter)
+    OffList = ""
+    for offc = 0 to OffCounter-1
+        spBranchSta.Z(V(offc)) = 1
+        GroupId = spBranchGrp.Z(V(offc))
+        if GroupId > 0 Then
+            spBranch.SetSel "groupid=" & CStr(GroupId)
+            spBranchSta.Calc 1
+            spBranch.SetSel ""
+        End If
+        if offc > 0 Then OffList = OffList + " | "
+        OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
+    next
+    PlaceOffs = OffList
+End function
+
+Function GetMax(V1,V2)
+    if V1 > V2 Then
+        GetMax = V1
+    Else
+        GetMax = V2
+    End If
+End function
+
+Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
+    if spUniquizer.ReadOutage Then
+        Rastr.LogEnable = 0
+        Status = Rastr.rgm("p")
+        Rastr.LogEnable = 1
+       
+        ' Формируем название режима
+        RegimeName = ""
+        if RepairTitle = "" Then
+            RegimeName = "Нормальная схема"
+        Else
+            RegimeName = "Ремонт: " & RepairTitle
+        End If
+       
+        if OutageTitle <> "" Then
+            if RegimeName <> "" Then RegimeName = RegimeName & " + "
+            RegimeName = RegimeName & "Откл: " & OutageTitle
+        End If
+        
+        if VariantTitle <> "" Then
+            if RegimeName <> "" Then RegimeName = RegimeName & " | "
+            RegimeName = RegimeName & VariantTitle
+        End If
+       
+        if Status <> AST_OK Then
+            ' Режим не существует - записываем во все листы
+            sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName & " [Режим не существует]"
+            sheetNodes.Cells(GlobalRowNodes, 1).Interior.Color = RGB(200,0,0)
+            sheetNodes.Cells(GlobalRowNodes, 1).Font.Color = RGB(255,255,255)
+            GlobalRowNodes = GlobalRowNodes + 1
+            
+            sheetBranches.Cells(GlobalRowBranches, 1).Value = RegimeName & " [Режим не существует]"
+            sheetBranches.Cells(GlobalRowBranches, 1).Interior.Color = RGB(200,0,0)
+            sheetBranches.Cells(GlobalRowBranches, 1).Font.Color = RGB(255,255,255)
+            GlobalRowBranches = GlobalRowBranches + 1
+        Else
+            ' === Лист "Узлы" ===
+            sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName
+            col = 2
+            for i = 0 to NodeCount-1
+                ndx = NodeIndexes(i)
+                V = spNodeV.Z(ndx)
+                Delta = spNodeDelta.Z(ndx)
+                
+                sheetNodes.Cells(GlobalRowNodes, col).Value = Round(V,2)
+                sheetNodes.Cells(GlobalRowNodes, col+1).Value = Round(Delta,2)
+                
+                col = col + 2
+            next
+            GlobalRowNodes = GlobalRowNodes + 1
+            
+            ' === Лист "Ветви" ===
+            sheetBranches.Cells(GlobalRowBranches, 1).Value = RegimeName
+            col = 2
+            for i = 0 to UBound(BranchIndexes)
+                ndx = BranchIndexes(i)
+                Imax = spBranchImax.Z(ndx) * 1000
+                Plmax = spBranchPlmax.Z(ndx)
+                D_ip = spBranchD_ip.Z(ndx)
+                D_iq = spBranchD_iq.Z(ndx)
+                
+                sheetBranches.Cells(GlobalRowBranches, col).Value = Round(Imax,2)
+                sheetBranches.Cells(GlobalRowBranches, col+1).Value = Round(Plmax,2)
+                sheetBranches.Cells(GlobalRowBranches, col+2).Value = Round(D_ip,2)
+                sheetBranches.Cells(GlobalRowBranches, col+3).Value = Round(D_iq,2)
+                
+                col = col + 4
+            next
+            GlobalRowBranches = GlobalRowBranches + 1
+        End If
+    End If
+End Sub
+
+Sub DoInvariantCalculations(RepairTitle, OutageTitle)
+    ' Находим ветвь с флагом ВДТ
+    spBranch.SetSel("ВДТ")
+    ndx = spBranch.FindNextSel(-1)
+    
+    if ndx >= 0 Then
+        ' Сохраняем исходные параметры
+        OriginalX = spBranchX.Z(ndx)
+        OriginalKtr = spBranchKtr.Z(ndx)
+        
+        ' Цикл по 18 инвариантам
+        for inv = 0 to 17
+            ' Устанавливаем новые параметры
+            spBranchX.Z(ndx) = X_Values(inv)
+            
+            ' Кт это комплексное число, преобразуем в Ktr (модуль коэффициента трансформации)
+            ' Ktr = sqrt(Kt_Real^2 + Kt_Imag^2)
+            KtReal = Kt_Real(inv)
+            KtImag = Kt_Imag(inv)
+            NewKtr = Sqr(KtReal * KtReal + KtImag * KtImag)
+            spBranchKtr.Z(ndx) = NewKtr
+            
+            ' Формируем название варианта
+            VariantTitle = "Вариант " & CStr(inv + 1) & ": X=" & FormatNumber(X_Values(inv),1) & " Ом, Кт=" & FormatNumber(KtReal,2) & "+j" & FormatNumber(KtImag,2)
+            
+            ' Выполняем расчет режима
+            DoRgm RepairTitle, OutageTitle, VariantTitle
+        next
+        
+        ' Восстанавливаем исходные параметры
+        spBranchX.Z(ndx) = OriginalX
+        spBranchKtr.Z(ndx) = OriginalKtr
+    End If
+End Sub
+
+' ============= ОСНОВНОЙ ЦИКЛ РАСЧЕТОВ =============
+
+' 1. НОРМАЛЬНАЯ СХЕМА
+TopologyRestore
+DoRgm "", "", ""
+
+' Проверяем наличие ВДТ для инвариантов в нормальной схеме
+spBranch.SetSel("ВДТ")
+VdtIndex = spBranch.FindNextSel(-1)
+if VdtIndex >= 0 Then
+    DoInvariantCalculations "", ""
+End If
+
+' 2. ЦИКЛ ПО РЕМОНТАМ
+for RepairCount = 1 to MaxRepair_count
+    if RepairComb.Init(RepairIndexes, RepairCount, UBound(RepairIndexes) + 1) Then
+        Dim RepairV()
+        HasMore = RepairComb.FirstCombination(RepairV)
+        
+        Do
+            TopologyRestore
+            RepairTitle = PlaceOffs(RepairV, RepairCount)
+            
+            ' Обычный расчет для ремонта
+            DoRgm RepairTitle, "", ""
+            
+            ' Инвариантные расчеты для ремонта
+            if VdtIndex >= 0 Then
+                DoInvariantCalculations RepairTitle, ""
+            End If
+            
+            ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
+            for OutageCount = 1 to MaxOutage_count
+                if OutageComb.Init(OutageIndexes, OutageCount, UBound(OutageIndexes) + 1) Then
+                    Dim OutageV()
+                    HasMoreOutage = OutageComb.FirstCombination(OutageV)
+                    
+                    Do
+                        TopologyRestore
+                        PlaceOffs RepairV, RepairCount
+                        OutageTitle = PlaceOffs(OutageV, OutageCount)
+                        
+                        ' Обычный расчет для ремонта + отключения
+                        DoRgm RepairTitle, OutageTitle, ""
+                        
+                        ' Инвариантные расчеты для ремонта + отключения
+                        if VdtIndex >= 0 Then
+                            DoInvariantCalculations RepairTitle, OutageTitle
+                        End If
+                        
+                        HasMoreOutage = OutageComb.NextCombination(OutageV)
+                    Loop While HasMoreOutage
+                End If
+            next
+            
+            HasMore = RepairComb.NextCombination(RepairV)
+        Loop While HasMore
+    End If
+next
+
+' Автоподбор ширины столбцов
+sheetNodes.Cells.EntireColumn.AutoFit
+sheetBranches.Cells.EntireColumn.AutoFit
+
+MsgBox "Расчет завершен! Результаты в Excel.", vbInformation, "Вариантные расчеты с инвариантами"
