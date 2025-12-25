@@ -407,17 +407,30 @@ Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
     End If
 End Sub
 
-Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex)
+Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex, RepairV, RepairCount, OutageV, OutageCount)
     ' Проверяем, что передан корректный индекс ветви ВДТ
     if vdtBranchIndex >= 0 Then
-        ' Сохраняем исходные параметры
+        ' Сохраняем исходные параметры ВДТ
         OriginalX = spBranchX.Z(vdtBranchIndex)
         OriginalKtr = spBranchKtr.Z(vdtBranchIndex)
         OriginalKti = spBranchKti.Z(vdtBranchIndex)
         
         ' Цикл по 18 инвариантам
         for inv = 0 to 17
-            ' Устанавливаем новые параметры
+            ' ВАЖНО: Восстанавливаем топологию перед каждым инвариантом
+            TopologyRestore
+            
+            ' Применяем ремонты, если есть
+            if RepairCount > 0 Then
+                PlaceOffs RepairV, RepairCount
+            End If
+            
+            ' Применяем отключения, если есть
+            if OutageCount > 0 Then
+                PlaceOffs OutageV, OutageCount
+            End If
+            
+            ' Устанавливаем параметры ВДТ для текущего инварианта
             spBranchX.Z(vdtBranchIndex) = X_Values(inv)
             spBranchKtr.Z(vdtBranchIndex) = Kt_Real(inv)
             spBranchKti.Z(vdtBranchIndex) = Kt_Imag(inv)
@@ -429,7 +442,7 @@ Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex)
             DoRgm RepairTitle, OutageTitle, VariantTitle
         next
         
-        ' Восстанавливаем исходные параметры
+        ' Восстанавливаем исходные параметры ВДТ
         spBranchX.Z(vdtBranchIndex) = OriginalX
         spBranchKtr.Z(vdtBranchIndex) = OriginalKtr
         spBranchKti.Z(vdtBranchIndex) = OriginalKti
@@ -450,7 +463,9 @@ TopologyRestore
 DoRgm "", "", ""
 
 if VdtIndex >= 0 Then
-    DoInvariantCalculations "", "", VdtIndex
+    Dim EmptyRepairV()
+    Dim EmptyOutageV()
+    DoInvariantCalculations "", "", VdtIndex, EmptyRepairV, 0, EmptyOutageV, 0
 End If
 
 ' 2. ЦИКЛ ПО РЕМОНТАМ
@@ -469,7 +484,8 @@ if RepairBranchCount > 0 Then
                 
                 ' Инвариантные расчеты для ремонта
                 if VdtIndex >= 0 Then
-                    DoInvariantCalculations RepairTitle, "", VdtIndex
+                    Dim EmptyOutageV2()
+                    DoInvariantCalculations RepairTitle, "", VdtIndex, RepairV, RepairCount, EmptyOutageV2, 0
                 End If
                 
                 ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
@@ -489,7 +505,7 @@ if RepairBranchCount > 0 Then
                                 
                                 ' Инвариантные расчеты для ремонта + отключения
                                 if VdtIndex >= 0 Then
-                                    DoInvariantCalculations RepairTitle, OutageTitle, VdtIndex
+                                    DoInvariantCalculations RepairTitle, OutageTitle, VdtIndex, RepairV, RepairCount, OutageV, OutageCount
                                 End If
                                 
                                 HasMoreOutage = OutageComb.NextCombination(OutageV)
