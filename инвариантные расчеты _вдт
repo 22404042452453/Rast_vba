@@ -312,11 +312,11 @@ function PlaceOffs(byref V, OffCounter)
     OffList = ""
     for offc = 0 to OffCounter-1
         if V(offc) >= 0 Then
-            spBranchSta.Z(V(offc)) = 1
+            spBranchSta.Z(V(offc)) = 0  ' ИСПРАВЛЕНО: 0 = отключить ветвь
             GroupId = spBranchGrp.Z(V(offc))
             if GroupId > 0 Then
                 spBranch.SetSel "groupid=" & CStr(GroupId)
-                spBranchSta.Calc 1
+                spBranchSta.Calc 0  ' ИСПРАВЛЕНО: 0 = отключить ветви группы
                 spBranch.SetSel ""
             End If
             if offc > 0 Then OffList = OffList + " | "
