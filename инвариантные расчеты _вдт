@@ -1,3 +1,4 @@
+
 MaxRepair = 1
 MaxRepair_count = 1
 MaxOutage = 1
@@ -40,6 +41,7 @@ Set spNodeV = spNode.Cols("vras")
 Set spNodeDelta = spNode.Cols("delta")
 
 Set spExcel = CreateObject("Excel.Application")
+spExcel.ScreenUpdating = False  ' Отключаем обновление экрана для ускорения
 spExcel.SheetsInNewWorkbook = 2
 spExcel.Workbooks.Add
 spExcel.Visible = true
@@ -56,17 +58,11 @@ sheetBranches.Name = "Ветви"
 GlobalRowNodes = 3
 GlobalRowBranches = 3
 
-class UniqueOutage
-    Private Hash
-    Private OutagePrint
-    Private OutageCount
-end class
-
 Set spStoredOutages = CreateObject("Scripting.Dictionary")
 
 class Uniquizer
     public function ReadOutage
-        spBranch.SetSel("sta")
+        spBranch.SetSel("sta=0")
         ndx = spBranch.FindNextSel(0)
         OutagePrint = ""
         while ndx >= 0
@@ -81,6 +77,11 @@ class Uniquizer
             spStoredOutages.Add OutagePrint,1
             ReadOutage = 1
         End If
+    end function
+    
+    ' НОВАЯ ФУНКЦИЯ: читать без проверки уникальности (для инвариантов)
+    public function ReadOutageNoCheck
+        ReadOutageNoCheck = 1
     end function
 end class
 
@@ -197,12 +198,6 @@ class Combinator
     Private m
     Private n
    
-    Private Sub Swap(byref V,i1,i2)
-        temp = V(i1)
-        V(i1) = V(i2)
-        V(i2) = temp
-    End Sub
-   
     public function Init(Vsource,Em,En)
         Init = True
         m = Em
@@ -232,30 +227,31 @@ class Combinator
     end function
    
     public function NextCombination(byref Vout)
-        if Counter(m-1) < n - 1 Then
-            Counter(m-1) = Counter(m-1) + 1
-        Else
-            for i = m-2 to 0 step -1
-                if Counter(i) < n - m + i Then
-                    Counter(i) = Counter(i) + 1
-                    for j = i + 1 to m - 1
-                        Counter(j) = Counter(j-1) + 1
-                    next
-                    Exit For
-                End If
-            next
-        End if
+        ' Проверяем, не достигли ли конца перебора
+        if Counter(0) = n - m Then
+            NextCombination = False
+            Exit Function
+        End If
+        
+        ' Ищем элемент для увеличения
+        for i = m-1 to 0 step -1
+            if Counter(i) < n - m + i Then
+                Counter(i) = Counter(i) + 1
+                ' Сбрасываем все последующие элементы
+                for j = i + 1 to m - 1
+                    Counter(j) = Counter(j-1) + 1
+                next
+                Exit For
+            End If
+        next
        
-        Redim Vout(m-1)
+        ' Формируем выходной массив
+        ReDim Vout(m-1)
         for i = 0 to m-1
             Vout(i) = V(Counter(i))
         next
        
-        if Counter(0) = n - m Then
-            NextCombination = 0
-        Else
-            NextCombination = 1
-        End If
+        NextCombination = True
     end function
 end class
 
@@ -271,10 +267,12 @@ Sub TopologyStore
 End Sub
 
 Sub TopologyRestore
+    On Error Resume Next  ' Включаем обработку ошибок
     spNode.SetSel ""
     spNodeSta.Calc("staRes")
     spBranch.SetSel ""
     spBranchSta.Calc("staRes")
+    On Error GoTo 0  ' Отключаем обработку ошибок
 End Sub
 
 Sub PrepareTemplate
@@ -304,25 +302,30 @@ Sub PrepareTemplate
     End if
     if FieldsAdded = 1 Then
         MsgBox "Необходимые поля добавлены. Выберите ветви и узлы, установите флаги и запустите макрос повторно.",1,"Вариантные расчеты с инвариантами"
-        WScript.Quit
+        Err.Raise 1  ' Прерываем выполнение скрипта
     End If
 End Sub
 
 function PlaceOffs(byref V, OffCounter)
     OffList = ""
-    for offc = 0 to OffCounter-1
-        if V(offc) >= 0 Then
-            spBranchSta.Z(V(offc)) = 0  ' ИСПРАВЛЕНО: 0 = отключить ветвь
-            GroupId = spBranchGrp.Z(V(offc))
-            if GroupId > 0 Then
-                spBranch.SetSel "groupid=" & CStr(GroupId)
-                spBranchSta.Calc 0  ' ИСПРАВЛЕНО: 0 = отключить ветви группы
-                spBranch.SetSel ""
-            End If
-            if offc > 0 Then OffList = OffList + " | "
-            OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
+    ' ИСПРАВЛЕНО: Проверяем, что массив не пустой
+    if OffCounter > 0 and IsArray(V) Then
+        if UBound(V) >= 0 Then
+            for offc = 0 to OffCounter-1
+                if offc <= UBound(V) and V(offc) >= 0 Then
+                    spBranchSta.Z(V(offc)) = 0  ' 0 = отключить ветвь
+                    GroupId = spBranchGrp.Z(V(offc))
+                    if GroupId > 0 Then
+                        spBranch.SetSel "groupid=" & CStr(GroupId)
+                        spBranchSta.Calc 0  ' 0 = отключить ветви группы
+                        spBranch.SetSel ""
+                    End If
+                    if offc > 0 Then OffList = OffList + " | "
+                    OffList = OffList + Cstr(spBranchNm.ZS(V(offc)))
+                End If
+            next
         End If
-    next
+    End If
     PlaceOffs = OffList
 End function
 
@@ -334,119 +337,133 @@ Function GetMax(V1,V2)
     End If
 End function
 
+Function SafeNum(val)
+    Dim s : s = CStr(val)
+    Dim sep : sep = Mid(CStr(1/2), 2, 1)
+    s = Replace(s, ".", sep) : s = Replace(s, ",", sep)
+    SafeNum = CDbl(s)
+End Function
+
 Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
-    if spUniquizer.ReadOutage Then
+    On Error Resume Next
+    ' Если это инвариантный расчет (VariantTitle не пустой), пропускаем проверку уникальности
+    CheckUnique = 1
+    if VariantTitle <> "" Then
+        CheckUnique = spUniquizer.ReadOutageNoCheck
+    Else
+        CheckUnique = spUniquizer.ReadOutage
+    End If
+
+    if CheckUnique Then
         Rastr.LogEnable = 0
         Status = Rastr.rgm("p")
         Rastr.LogEnable = 1
-       
-        ' Формируем название режима
-        RegimeName = ""
-        if RepairTitle = "" Then
-            RegimeName = "Нормальная схема"
+
+        ' Проверяем на ошибки выполнения
+        if Err.Number <> 0 Then
+            RegimeName = "ОШИБКА ВЫПОЛНЕНИЯ: " & Err.Description
+            Err.Clear
         Else
-            RegimeName = "Ремонт: " & RepairTitle
+            ' Формируем название режима
+            RegimeName = ""
+            if RepairTitle = "" Then
+                RegimeName = "Нормальная схема"
+            Else
+                RegimeName = "Ремонт: " & RepairTitle
+            End If
+
+            if OutageTitle <> "" Then
+                if RegimeName <> "" Then RegimeName = RegimeName & " + "
+                RegimeName = RegimeName & "Откл: " & OutageTitle
+            End If
+
+            if VariantTitle <> "" Then
+                if RegimeName <> "" Then RegimeName = RegimeName & " | "
+                RegimeName = RegimeName & VariantTitle
+            End If
+
+            ' Проверяем результат расчета и добавляем пометку о несошедшемся режиме
+            if Status <> AST_OK Then
+                RegimeName = RegimeName & " (НЕ СОШЕЛСЯ)"
+            End If
         End If
        
-        if OutageTitle <> "" Then
-            if RegimeName <> "" Then RegimeName = RegimeName & " + "
-            RegimeName = RegimeName & "Откл: " & OutageTitle
-        End If
+        ' === Лист "Узлы" ===
+        sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName
+        col = 2
+        for i = 0 to NodeCount-1
+            ndx = NodeIndexes(i)
+            VoltageValue = spNodeV.Z(ndx)  ' ИСПРАВЛЕНО: переименовал V в VoltageValue
+            DeltaValue = spNodeDelta.Z(ndx)
+            
+            sheetNodes.Cells(GlobalRowNodes, col).Value = Round(VoltageValue,2)
+            sheetNodes.Cells(GlobalRowNodes, col+1).Value = Round(DeltaValue,2)
+            
+            col = col + 2
+        next
+        GlobalRowNodes = GlobalRowNodes + 1
         
-        if VariantTitle <> "" Then
-            if RegimeName <> "" Then RegimeName = RegimeName & " | "
-            RegimeName = RegimeName & VariantTitle
-        End If
-       
-        if Status <> AST_OK Then
-            ' Режим не существует - записываем во все листы
-            sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName & " [Режим не существует]"
-            sheetNodes.Cells(GlobalRowNodes, 1).Interior.Color = RGB(200,0,0)
-            sheetNodes.Cells(GlobalRowNodes, 1).Font.Color = RGB(255,255,255)
-            GlobalRowNodes = GlobalRowNodes + 1
+        ' === Лист "Ветви" ===
+        sheetBranches.Cells(GlobalRowBranches, 1).Value = RegimeName
+        col = 2
+        for i = 0 to BranchCount-1
+            ndx = BranchIndexes(i)
+            Imax = spBranchImax.Z(ndx) * 1000
+            Plmax = spBranchPlmax.Z(ndx)
+            D_ip = spBranchD_ip.Z(ndx)
+            D_iq = spBranchD_iq.Z(ndx)
             
-            sheetBranches.Cells(GlobalRowBranches, 1).Value = RegimeName & " [Режим не существует]"
-            sheetBranches.Cells(GlobalRowBranches, 1).Interior.Color = RGB(200,0,0)
-            sheetBranches.Cells(GlobalRowBranches, 1).Font.Color = RGB(255,255,255)
-            GlobalRowBranches = GlobalRowBranches + 1
-        Else
-            ' === Лист "Узлы" ===
-            sheetNodes.Cells(GlobalRowNodes, 1).Value = RegimeName
-            col = 2
-            for i = 0 to NodeCount-1
-                ndx = NodeIndexes(i)
-                V = spNodeV.Z(ndx)
-                Delta = spNodeDelta.Z(ndx)
-                
-                sheetNodes.Cells(GlobalRowNodes, col).Value = Round(V,2)
-                sheetNodes.Cells(GlobalRowNodes, col+1).Value = Round(Delta,2)
-                
-                col = col + 2
-            next
-            GlobalRowNodes = GlobalRowNodes + 1
+            sheetBranches.Cells(GlobalRowBranches, col).Value = Round(Imax,2)
+            sheetBranches.Cells(GlobalRowBranches, col+1).Value = Round(Plmax,2)
+            sheetBranches.Cells(GlobalRowBranches, col+2).Value = Round(D_ip,2)
+            sheetBranches.Cells(GlobalRowBranches, col+3).Value = Round(D_iq,2)
             
-            ' === Лист "Ветви" ===
-            sheetBranches.Cells(GlobalRowBranches, 1).Value = RegimeName
-            col = 2
-            for i = 0 to BranchCount-1
-                ndx = BranchIndexes(i)
-                Imax = spBranchImax.Z(ndx) * 1000
-                Plmax = spBranchPlmax.Z(ndx)
-                D_ip = spBranchD_ip.Z(ndx)
-                D_iq = spBranchD_iq.Z(ndx)
-                
-                sheetBranches.Cells(GlobalRowBranches, col).Value = Round(Imax,2)
-                sheetBranches.Cells(GlobalRowBranches, col+1).Value = Round(Plmax,2)
-                sheetBranches.Cells(GlobalRowBranches, col+2).Value = Round(D_ip,2)
-                sheetBranches.Cells(GlobalRowBranches, col+3).Value = Round(D_iq,2)
-                
-                col = col + 4
-            next
-            GlobalRowBranches = GlobalRowBranches + 1
-        End If
+            col = col + 4
+        next
+        GlobalRowBranches = GlobalRowBranches + 1
     End If
+    On Error GoTo 0
 End Sub
 
 Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex, RepairV, RepairCount, OutageV, OutageCount)
-    ' Проверяем, что передан корректный индекс ветви ВДТ
+    On Error Resume Next
     if vdtBranchIndex >= 0 Then
-        ' Сохраняем исходные параметры ВДТ
+        MsgBox "Запуск инвариантных расчётов для ветви: " & spBranchNm.ZS(vdtBranchIndex), vbInformation, "Отладка"
+        ' Сохраняем параметры
         OriginalX = spBranchX.Z(vdtBranchIndex)
         OriginalKtr = spBranchKtr.Z(vdtBranchIndex)
         OriginalKti = spBranchKti.Z(vdtBranchIndex)
-        
-        ' Цикл по 18 инвариантам
+        OriginalTip = spBranchTip.Z(vdtBranchIndex)
+
         for inv = 0 to 17
-            ' ВАЖНО: Восстанавливаем топологию перед каждым инвариантом
-            TopologyRestore
-            
-            ' Применяем ремонты, если есть
-            if RepairCount > 0 Then
-                PlaceOffs RepairV, RepairCount
-            End If
-            
-            ' Применяем отключения, если есть
-            if OutageCount > 0 Then
-                PlaceOffs OutageV, OutageCount
-            End If
-            
-            ' Устанавливаем параметры ВДТ для текущего инварианта
-            spBranchX.Z(vdtBranchIndex) = X_Values(inv)
-            spBranchKtr.Z(vdtBranchIndex) = Kt_Real(inv)
-            spBranchKti.Z(vdtBranchIndex) = Kt_Imag(inv)
-            
-            ' Формируем название варианта
-            VariantTitle = "Вариант " & CStr(inv + 1) & ": X=" & FormatNumber(X_Values(inv),1) & " Ом, Кт=" & FormatNumber(Kt_Real(inv),2) & "+j" & FormatNumber(Kt_Imag(inv),2)
-            
-            ' Выполняем расчет режима
+            TopologyRestore ' Сбросит всё, включая тип ветви
+
+            ' Применяем отключения только если они есть
+            if RepairCount > 0 Then PlaceOffs RepairV, RepairCount
+            if OutageCount > 0 Then PlaceOffs OutageV, OutageCount
+
+            ' Убеждаемся, что ВДТ ветвь включена
+            spBranchSta.Z(vdtBranchIndex) = 1
+
+            ' Настройка ВДТ строго для одной строки
+            spBranchTip.Z(vdtBranchIndex) = 1
+            spBranchX.Z(vdtBranchIndex) = SafeNum(X_Values(inv))
+            spBranchKtr.Z(vdtBranchIndex) = SafeNum(Kt_Real(inv))
+            spBranchKti.Z(vdtBranchIndex) = SafeNum(Kt_Imag(inv))
+            ' Отключаем автоматику, чтобы Rastr не менял Ktr сам
+            spBranch.Cols("n_anc").Z(vdtBranchIndex) = 0
+
+            VariantTitle = "Инв " & (inv + 1)
             DoRgm RepairTitle, OutageTitle, VariantTitle
         next
-        
-        ' Восстанавливаем исходные параметры ВДТ
+
+        ' Возврат
         spBranchX.Z(vdtBranchIndex) = OriginalX
         spBranchKtr.Z(vdtBranchIndex) = OriginalKtr
         spBranchKti.Z(vdtBranchIndex) = OriginalKti
+        spBranchTip.Z(vdtBranchIndex) = OriginalTip
     End If
+    On Error GoTo 0
 End Sub
 
 ' ============= ОСНОВНОЙ ЦИКЛ РАСЧЕТОВ =============
@@ -455,17 +472,38 @@ End Sub
 VdtIndex = -1
 
 ' Проверяем наличие ВДТ для инвариантных расчетов
+spBranch.SetSel ""
 spBranch.SetSel("ВДТ")
-VdtIndex = spBranch.FindNextSel(0)
+VdtIndex = spBranch.FindNextSel(-1)
+spBranch.SetSel ""
+
+if VdtIndex >= 0 Then
+    isRepair = False
+    for i = 0 to RepairBranchCount-1
+        if RepairIndexes(i) = VdtIndex Then
+            isRepair = True
+            Exit For
+        End If
+    next
+    if isRepair Then
+        MsgBox "ВДТ ветвь не должна быть в списке ремонтов. Выберите другую ветвь для ВДТ.", vbExclamation, "Ошибка"
+        VdtIndex = -1
+    End If
+End If
+
+' Отладка: проверка нахождения ВДТ ветви
+if VdtIndex >= 0 Then
+    MsgBox "ВДТ ветвь найдена: " & spBranchNm.ZS(VdtIndex), vbInformation, "Отладка"
+Else
+    MsgBox "ВДТ ветвь не найдена. Установите галочку ВДТ на нужной ветви.", vbExclamation, "Отладка"
+End If
 
 ' 1. НОРМАЛЬНАЯ СХЕМА
 TopologyRestore
 DoRgm "", "", ""
 
 if VdtIndex >= 0 Then
-    Dim EmptyRepairV()
-    Dim EmptyOutageV()
-    DoInvariantCalculations "", "", VdtIndex, EmptyRepairV, 0, EmptyOutageV, 0
+    DoInvariantCalculations "", "", VdtIndex, Null, 0, Null, 0
 End If
 
 ' 2. ЦИКЛ ПО РЕМОНТАМ
@@ -474,54 +512,59 @@ if RepairBranchCount > 0 Then
         if RepairComb.Init(RepairIndexes, RepairCount, RepairBranchCount) Then
             Dim RepairV()
             HasMore = RepairComb.FirstCombination(RepairV)
-            
+
             Do
                 TopologyRestore
                 RepairTitle = PlaceOffs(RepairV, RepairCount)
-                
+
                 ' Обычный расчет для ремонта
                 DoRgm RepairTitle, "", ""
-                
+
                 ' Инвариантные расчеты для ремонта
                 if VdtIndex >= 0 Then
-                    Dim EmptyOutageV2()
-                    DoInvariantCalculations RepairTitle, "", VdtIndex, RepairV, RepairCount, EmptyOutageV2, 0
+                    DoInvariantCalculations RepairTitle, "", VdtIndex, RepairV, RepairCount, Null, 0
                 End If
-                
+
                 ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (внутри ремонта)
                 if OutageBranchCount > 0 Then
                     for OutageCount = 1 to MaxOutage_count
                         if OutageComb.Init(OutageIndexes, OutageCount, OutageBranchCount) Then
                             Dim OutageV()
                             HasMoreOutage = OutageComb.FirstCombination(OutageV)
-                            
+
                             Do
                                 TopologyRestore
                                 PlaceOffs RepairV, RepairCount
                                 OutageTitle = PlaceOffs(OutageV, OutageCount)
-                                
+
                                 ' Обычный расчет для ремонта + отключения
                                 DoRgm RepairTitle, OutageTitle, ""
-                                
+
                                 ' Инвариантные расчеты для ремонта + отключения
                                 if VdtIndex >= 0 Then
                                     DoInvariantCalculations RepairTitle, OutageTitle, VdtIndex, RepairV, RepairCount, OutageV, OutageCount
                                 End If
-                                
+
                                 HasMoreOutage = OutageComb.NextCombination(OutageV)
                             Loop While HasMoreOutage
                         End If
                     next
                 End If
-                
+
                 HasMore = RepairComb.NextCombination(RepairV)
             Loop While HasMore
         End If
     next
 End If
 
-' Автоподбор ширины столбцов
-sheetNodes.Cells.EntireColumn.AutoFit
-sheetBranches.Cells.EntireColumn.AutoFit
+' === ЗАВЕРШЕНИЕ РАБОТЫ ===
+sheetNodes.Columns.AutoFit
+sheetBranches.Columns.AutoFit
 
-MsgBox "Расчет завершен! Результаты в Excel.", vbInformation, "Вариантные расчеты с инвариантами"
+' Возвращаем управление Excel пользователю
+spExcel.ScreenUpdating = True
+spExcel.Visible = True
+
+MsgBox "Расчет завершен успешно!" & vbCrLf & _
+       "Обработано узлов: " & NodeCount & vbCrLf & _
+       "Обработано ветвей: " & BranchCount, vbInformation, "RastrWin + Excel"
