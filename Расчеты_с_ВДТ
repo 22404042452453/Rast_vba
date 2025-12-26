@@ -1,0 +1,666 @@
+MaxRepair = 2
+MaxRepair_count = 2
+MaxOutage = 2
+MaxOutage_count = 2
+
+' Глобальная обработка ошибок для отладки
+On Error Resume Next
+
+Set spBranch = Rastr.Tables("vetv")
+If Err.Number <> 0 Then
+    MsgBox "ОШИБКА: Объект Rastr недоступен!" & vbCrLf & vbCrLf & _
+           "Этот скрипт должен выполняться из программы Rastr." & vbCrLf & vbCrLf & _
+           "Инструкция:" & vbCrLf & _
+           "1. Откройте файл схемы в программе Rastr" & vbCrLf & _
+           "2. Выполните скрипт через меню Rastr (Файл → Выполнить скрипт)", vbCritical, "Ошибка запуска"
+    WScript.Quit
+End If
+
+Set spNode = Rastr.Tables("node")
+If Err.Number <> 0 Then
+    MsgBox "Ошибка при получении таблицы узлов: " & Err.Description, vbCritical
+    WScript.Quit
+End If
+
+On Error GoTo 0
+
+PrepareTemplate
+
+' === ОПТИМИЗАЦИЯ 1: КЭШИРОВАНИЕ ВСЕХ ССЫЛОК НА КОЛОНКИ ===
+' Поля ветвей
+Set spBranchIp = spBranch.Cols("ip")
+Set spBranchIq = spBranch.Cols("iq")
+Set spBranchNa = spBranch.Cols("na")
+Set spBranchNm = spBranch.Cols("name")
+Set spBranchSta = spBranch.Cols("sta")
+Set spBranchSel = spBranch.Cols("Report")
+Set spBranchSmx = spBranch.Cols("slmax")
+Set spBranchImax = spBranch.Cols("i_max")
+Set spBranchIl = spBranch.Cols("zag_it")
+Set spBranchIpr = spBranch.Cols("i_dop_r")
+Set spBranchGrp = spBranch.Cols("groupid")
+Set spBranchSrt = spBranch.Cols("_SortKey")
+Set spBranchTip = spBranch.Cols("tip")
+Set spBranchPlmax = spBranch.Cols("plmax")
+Set spBranchD_ip = spBranch.Cols("d_ip")
+Set spBranchD_iq = spBranch.Cols("d_iq")
+Set spBranchX = spBranch.Cols("x")
+Set spBranchKtr = spBranch.Cols("ktr")
+Set spBranchKti = spBranch.Cols("kti")
+
+' Поля узлов
+Set spNodeSta = spNode.Cols("sta")
+Set spNodeNy = spNode.Cols("ny")
+Set spNodeName = spNode.Cols("name")
+Set spNodeUhom = spNode.Cols("uhom")
+Set spNodeUmin = spNode.Cols("umin")
+Set spNodeUmax = spNode.Cols("umax")
+Set spNodeV = spNode.Cols("vras")
+Set spNodeDelta = spNode.Cols("delta")
+
+' Инициализация Excel
+On Error Resume Next
+Set spExcel = CreateObject("Excel.Application")
+If Err.Number <> 0 Then
+    MsgBox "ОШИБКА: Невозможно создать объект Excel: " & Err.Description, vbCritical, "Ошибка Excel"
+    WScript.Quit
+End If
+
+spExcel.ScreenUpdating = True  ' ОПТИМИЗАЦИЯ: Отключаем обновление экрана
+spExcel.DisplayAlerts = False   ' ОПТИМИЗАЦИЯ: Отключаем предупреждения
+spExcel.SheetsInNewWorkbook = 2
+
+Set wb = spExcel.Workbooks.Add
+If Err.Number <> 0 Then
+    MsgBox "ОШИБКА: Невозможно создать книгу Excel: " & Err.Description, vbCritical, "Ошибка книги"
+    spExcel.Quit
+    WScript.Quit
+End If
+
+spExcel.Visible = True
+
+' Создаём листы
+Dim sheetNodes, sheetBranches
+Set sheetNodes = wb.Worksheets(1)
+Set sheetBranches = wb.Worksheets(2)
+
+sheetNodes.Name = "Nodes"
+sheetBranches.Name = "Branches"
+On Error GoTo 0
+
+' Глобальные счётчики строк для каждого листа
+GlobalRowNodes = 3
+GlobalRowBranches = 3
+
+Set spStoredOutages = CreateObject("Scripting.Dictionary")
+
+class Uniquizer
+    public function ReadOutage
+        spBranch.SetSel("sta=0")
+        ndx = spBranch.FindNextSel(-1)
+        OutagePrint = ""
+        while ndx >= 0
+            OutagePrint = OutagePrint + CStr(ndx)
+            OutagePrint = OutagePrint + ";"
+            ndx = spBranch.FindNextSel(ndx)
+        wend
+       
+        if spStoredOutages.Exists(OutagePrint) Then
+            ReadOutage = 0
+        Else
+            spStoredOutages.Add OutagePrint,1
+            ReadOutage = 1
+        End If
+    end function
+    
+    public function ReadOutageNoCheck
+        ReadOutageNoCheck = 1
+    end function
+end class
+
+Set spUniquizer = new Uniquizer
+
+Dim RepairComb
+Set RepairComb = new Combinator
+
+Dim OutageComb
+Set OutageComb = new Combinator
+
+TopologyStore
+
+' === ОПТИМИЗАЦИЯ 2: ЕДИНЫЙ ПРОХОД ДЛЯ СБОРА ВСЕХ ИНДЕКСОВ ===
+Dim BranchIndexes(), NodeIndexes(), RepairIndexes(), OutageIndexes(), VdtIndex
+Dim bc, nc, rc, oc
+
+bc = 0: nc = 0: rc = 0: oc = 0
+VdtIndex = -1
+
+' Один проход по таблице ветвей для сбора всех индексов
+For i = 0 To spBranch.Count - 1
+    If spBranchSel.Z(i) = True Then
+        ReDim Preserve BranchIndexes(bc): BranchIndexes(bc) = i: bc = bc + 1
+    End If
+    If spBranch.Cols("Repair").Z(i) = True Then
+        ReDim Preserve RepairIndexes(rc): RepairIndexes(rc) = i: rc = rc + 1
+    End If
+    If spBranch.Cols("Outage").Z(i) = True Then
+        ReDim Preserve OutageIndexes(oc): OutageIndexes(oc) = i: oc = oc + 1
+    End If
+    If spBranch.Cols("ВДТ").Z(i) = True Then
+        VdtIndex = i
+    End If
+Next
+
+' Один проход по таблице узлов
+For i = 0 To spNode.Count - 1
+    If spNode.Cols("sel").Z(i) = True Then
+        ReDim Preserve NodeIndexes(nc): NodeIndexes(nc) = i: nc = nc + 1
+    End If
+Next
+
+' Проверка наличия элементов для отчета
+If bc = 0 Then
+    MsgBox "ВНИМАНИЕ: Не найдено ни одной ветви с флагом Report!" & vbCrLf & _
+           "Установите флаг Report на нужных ветвях.", vbExclamation, "Нет ветвей для отчета"
+    spExcel.Quit
+    Set spExcel = Nothing
+    WScript.Quit
+End If
+
+If nc = 0 Then
+    MsgBox "ВНИМАНИЕ: Не найдено ни одного узла с флагом sel!" & vbCrLf & _
+           "Установите флаг sel на нужных узлах.", vbExclamation, "Нет узлов для отчета"
+    spExcel.Quit
+    Set spExcel = Nothing
+    WScript.Quit
+End If
+
+' === ПРОВЕРКА КОНФЛИКТОВ ВДТ ===
+Dim HasConflict : HasConflict = False
+Dim isRepair, isOutage, k
+
+If VdtIndex >= 0 Then
+    isRepair = False
+    isOutage = False
+    
+    If rc > 0 Then
+        For k = 0 to rc-1
+            If RepairIndexes(k) = VdtIndex Then
+                isRepair = True
+                Exit For
+            End If
+        Next
+    End If
+    
+    If oc > 0 Then
+        For k = 0 to oc-1
+            If OutageIndexes(k) = VdtIndex Then
+                isOutage = True
+                Exit For
+            End If
+        Next
+    End If
+    
+    If isRepair Then
+        MsgBox "ОШИБКА: ВДТ ветвь [" & VdtIndex & "] '" & spBranchNm.ZS(VdtIndex) & "' находится в ремонтах!" & vbCrLf & vbCrLf & _
+               "Снимите флаг 'Ремонт' с этой ветви и запустите макрос заново.", vbCritical, "Конфликт флагов"
+        HasConflict = True
+        VdtIndex = -1
+    ElseIf isOutage Then
+        MsgBox "ОШИБКА: ВДТ ветвь [" & VdtIndex & "] '" & spBranchNm.ZS(VdtIndex) & "' находится в отключениях!" & vbCrLf & vbCrLf & _
+               "Снимите флаг 'Откл' с этой ветви и запустите макрос заново.", vbCritical, "Конфликт флагов"
+        HasConflict = True
+        VdtIndex = -1
+    Else
+        MsgBox "✓ ВДТ ветвь: [" & VdtIndex & "] " & spBranchNm.ZS(VdtIndex) & vbCrLf & _
+               "✓ Проверка пройдена: нет конфликтов" & vbCrLf & vbCrLf & _
+               "Будет выполнено 18 инвариантных расчетов.", vbInformation, "ВДТ готова"
+    End If
+End If
+
+' Если есть конфликт, закрываем Excel и выходим
+If HasConflict Then
+    On Error Resume Next
+    spExcel.DisplayAlerts = False
+    spExcel.Quit
+    Set spExcel = Nothing
+    On Error GoTo 0
+    MsgBox "Выполнение прервано из-за конфликта флагов.", vbExclamation, "Прервано"
+    WScript.Quit
+End If
+
+' === ЗАЩИТА ОТ ГРУППОВЫХ ОПЕРАЦИЙ ===
+Dim OriginalVdtGroup
+If VdtIndex >= 0 Then
+    ' Сохраняем оригинальную группу ВДТ
+    On Error Resume Next
+    OriginalVdtGroup = spBranchGrp.Z(VdtIndex)
+    On Error GoTo 0
+    
+    ' Убираем ВДТ из группы для защиты от групповых отключений
+    If OriginalVdtGroup > 0 Then
+        On Error Resume Next
+        spBranchGrp.Z(VdtIndex) = 0
+        On Error GoTo 0
+        MsgBox "ВДТ ветвь временно изъята из группы " & OriginalVdtGroup & " для защиты от отключений.", vbInformation, "Защита ВДТ"
+    End If
+End If
+
+' === ИТОГОВАЯ ИНФОРМАЦИЯ ===
+Dim VdtStatus
+If VdtIndex >= 0 Then VdtStatus = "Да" Else VdtStatus = "Нет"
+
+MsgBox "Готово к расчету:" & vbCrLf & _
+       "• Ветвей в отчете: " & bc & vbCrLf & _
+       "• Узлов в отчете: " & nc & vbCrLf & _
+       "• Ремонтных ветвей: " & rc & vbCrLf & _
+       "• Отключаемых ветвей: " & oc & vbCrLf & _
+       "• ВДТ: " & VdtStatus, vbInformation, "Начало расчета"
+
+' === ИСПРАВЛЕННАЯ ОПТИМИЗАЦИЯ 3: ШАПКИ ===
+
+' Шапка для узлов (по количеству узлов в отчете nc)
+Dim headerDataNodes()
+ReDim headerDataNodes(1, nc * 2)
+
+headerDataNodes(0, 0) = "Режим"
+colIndex = 1
+For i = 0 To nc - 1
+    headerDataNodes(0, colIndex) = spNodeName.ZS(NodeIndexes(i))
+    headerDataNodes(1, colIndex) = "U, кВ"
+    headerDataNodes(1, colIndex + 1) = "Delta, °"
+    colIndex = colIndex + 2
+Next
+sheetNodes.Range(sheetNodes.Cells(1, 1), sheetNodes.Cells(2, nc * 2 + 1)).Value = headerDataNodes
+
+' Шапка для ветвей (по количеству веток в отчете bc)
+Dim headerDataBranches()
+ReDim headerDataBranches(1, bc * 4)
+
+headerDataBranches(0, 0) = "Режим"
+colIndex = 1
+For i = 0 To bc - 1
+    headerDataBranches(0, colIndex) = spBranchNm.ZS(BranchIndexes(i))
+    headerDataBranches(1, colIndex) = "I, А"
+    headerDataBranches(1, colIndex + 1) = "S, МВА"
+    headerDataBranches(1, colIndex + 2) = "dP, МВт"
+    headerDataBranches(1, colIndex + 3) = "dQ, МВар"
+    colIndex = colIndex + 4
+Next
+sheetBranches.Range(sheetBranches.Cells(1, 1), sheetBranches.Cells(2, bc * 4 + 1)).Value = headerDataBranches
+
+' Данные для инвариантных расчетов
+Dim X_Values, Kt_Real, Kt_Imag
+X_Values = Array(0.0, 0.0, 0.2, 0.4, 0.7, 1.1, 1.6, 2.2, 2.9, 3.7, 4.6, 5.5, 6.6, 7.8, 8.9, 10.3, 11.7, 13.2)
+Kt_Real = Array(1.00, 1.00, 1.00, 0.99, 0.99, 0.98, 0.98, 0.97, 0.96, 0.95, 0.94, 0.92, 0.91, 0.89, 0.88, 0.86, 0.84, 0.82)
+Kt_Imag = Array(0.00, 0.04, 0.07, 0.11, 0.14, 0.18, 0.21, 0.25, 0.28, 0.32, 0.35, 0.39, 0.42, 0.45, 0.48, 0.51, 0.54, 0.57)
+
+class Combinator
+    Dim Counter()
+    Dim V()
+    Private m
+    Private n
+    
+    public function Init(Vsource, Em, En)
+        m = Em
+        n = En
+        If m > n Or m <= 0 Then
+            Init = False
+            Exit Function
+        End If
+        
+        Redim V(UBound(Vsource))
+        For i = 0 to UBound(Vsource)
+            V(i) = Vsource(i)
+        Next
+        
+        Redim Counter(m - 1)
+        For i = 0 to m - 1
+            Counter(i) = i
+        Next
+        Init = True
+    End function
+    
+    public function FirstCombination(byref Vout)
+        ReDim Vout(m - 1)
+        For i = 0 to m - 1
+            Vout(i) = V(Counter(i))
+        Next
+        FirstCombination = True
+    End function
+    
+    public function NextCombination(byref Vout)
+        Dim i, j
+        i = m - 1
+        ' Ищем элемент, который можно увеличить
+        Do While i >= 0
+            If Counter(i) < n - m + i Then Exit Do
+            i = i - 1
+        Loop
+
+        If i < 0 Then
+            NextCombination = False ' Все комбинации исчерпаны
+            Exit Function
+        End If
+
+        Counter(i) = Counter(i) + 1
+        For j = i + 1 to m - 1
+            Counter(j) = Counter(j - 1) + 1
+        Next
+
+        ReDim Vout(m - 1)
+        For i = 0 to m - 1
+            Vout(i) = V(Counter(i))
+        Next
+        NextCombination = True
+    End function
+end class
+
+Sub TopologyStore
+    on error resume next
+    spNode.Cols.Add "staRes",PR_BOOL
+    spBranch.Cols.Add "staRes",PR_BOOL
+    on error goto 0
+    spNode.SetSel ""
+    spNode.Cols("staRes").Calc("sta")
+    spBranch.SetSel ""
+    spBranch.Cols("staRes").Calc("sta")
+End Sub
+
+Sub TopologyRestore
+    On Error Resume Next
+    spNode.SetSel ""
+    spNodeSta.Calc("staRes")
+    spBranch.SetSel ""
+    spBranchSta.Calc("staRes")
+    On Error GoTo 0
+End Sub
+
+Sub PrepareTemplate
+    On Error Resume Next
+    FieldsAdded = 0
+    ' Проверяем и добавляем поля ветвей
+    if spBranch.Cols.Find("Repair") < 0 Then
+        spBranch.Cols.Add "Repair", PR_BOOL
+        spBranch.Cols("Repair").Prop(FL_ZAG) = "Ремонт"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Outage") < 0 Then
+        spBranch.Cols.Add "Outage", PR_BOOL
+        spBranch.Cols("Outage").Prop(FL_ZAG) = "Откл"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("Report") < 0 Then
+        spBranch.Cols.Add "Report", PR_BOOL
+        spBranch.Cols("Report").Prop(FL_ZAG) = "Отчет"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("ВДТ") < 0 Then
+        spBranch.Cols.Add "ВДТ", PR_BOOL
+        spBranch.Cols("ВДТ").Prop(FL_ZAG) = "Вольт-добав тр-ра"
+        FieldsAdded = 1
+    End If
+    if spBranch.Cols.Find("_SortKey") < 0 Then
+        spBranch.Cols.Add "_SortKey", PR_INT
+    End If
+
+    ' Проверяем и добавляем поле узлов
+    if spNode.Cols.Find("sel") < 0 Then
+        spNode.Cols.Add "sel", PR_BOOL
+        FieldsAdded = 1
+    End If
+
+    if FieldsAdded = 1 Then
+        MsgBox "Необходимые поля добавлены. Выберите ветви и узлы, установите флаги и запустите макрос повторно.",1,"Вариантные расчеты с инвариантами"
+        Err.Raise 1
+    End If
+    On Error GoTo 0
+End Sub
+
+' === ОПТИМИЗАЦИЯ 4: УПРОЩЕННАЯ ФУНКЦИЯ ОТКЛЮЧЕНИЯ С ИСКЛЮЧЕНИЕМ ВДТ ===
+
+function PlaceOffs(byref V, OffCounter, ExcludeIndex)
+    ' ExcludeIndex - индекс ветви, которую НЕ нужно отключать (например, ВДТ)
+    On Error Resume Next
+    OffList = ""
+    
+    If OffCounter > 0 And IsArray(V) Then
+        For offc = 0 To OffCounter-1
+            ' Пропускаем ВДТ ветвь
+            If V(offc) <> ExcludeIndex Then
+                spBranchSta.Z(V(offc)) = 1  ' Отключаем ветвь (sta=1 в RastrWin = ОТКЛЮЧЕНО)
+                
+                ' Обработка группы - ОТКЛЮЧАЕМ ТОЛЬКО ВЕТВИ, КРОМЕ ВДТ
+                GroupId = spBranchGrp.Z(V(offc))
+                If GroupId > 0 Then
+                    spBranch.SetSel "groupid=" & CStr(GroupId)
+                    ' Проверяем каждую ветвь в группе и отключаем, кроме ВДТ
+                    For grpIdx = 0 To spBranch.Count - 1
+                        If spBranchGrp.Z(grpIdx) = GroupId And grpIdx <> ExcludeIndex Then
+                            spBranchSta.Z(grpIdx) = 1  ' Отключаем ветвь в группе (sta=1 в RastrWin = ОТКЛЮЧЕНО)
+                        End If
+                    Next
+                    spBranch.SetSel ""
+                End If
+                
+                If OffList <> "" Then OffList = OffList + " | "
+                OffList = OffList + CStr(spBranchNm.ZS(V(offc)))
+            End If
+        Next
+    End If
+    
+    PlaceOffs = OffList
+    On Error GoTo 0
+End function
+
+Function SafeNum(val)
+    Dim sep : sep = Mid(CStr(1/2), 2, 1)
+    SafeNum = CDbl(Replace(CStr(val), ".", sep))
+End Function
+
+' === ИСПРАВЛЕННАЯ ФУНКЦИЯ DoRgm ===
+
+Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
+    On Error Resume Next
+    
+    ' Расчет
+    Rastr.LogEnable = 0
+    Status = Rastr.rgm("p")
+    Rastr.LogEnable = 1
+
+    ' Название режима
+    RegimeName = ""
+    If RepairTitle = "" Then RegimeName = "Нормальный режим" Else RegimeName = "Рем: " & RepairTitle
+    If OutageTitle <> "" Then RegimeName = RegimeName & " + Откл: " & OutageTitle
+    If VariantTitle <> "" Then RegimeName = RegimeName & " [" & VariantTitle & "]"
+    If Status <> 0 Then RegimeName = RegimeName & " (НЕ СОШЕЛСЯ)"
+
+    ' ЗАПИСЬ УЗЛОВ (nc)
+    Dim nData(): ReDim nData(0, nc * 2)
+    nData(0, 0) = RegimeName
+    c = 1
+    For i = 0 To nc - 1
+        idx = NodeIndexes(i)
+        nData(0, c) = Round(spNodeV.Z(idx), 2)
+        nData(0, c + 1) = Round(spNodeDelta.Z(idx), 2)
+        c = c + 2
+    Next
+    sheetNodes.Range(sheetNodes.Cells(GlobalRowNodes, 1), sheetNodes.Cells(GlobalRowNodes, nc * 2 + 1)).Value = nData
+    GlobalRowNodes = GlobalRowNodes + 1
+
+    ' ЗАПИСЬ ВЕТВЕЙ (bc) - ТУТ БЫЛА ОШИБКА rc
+    Dim bData(): ReDim bData(0, bc * 4)
+    bData(0, 0) = RegimeName
+    c = 1
+    For i = 0 To bc - 1
+        idx = BranchIndexes(i)
+        ' Используем стандартные поля Rastr для тока и мощности
+        bData(0, c) = Round(spBranchImax.Z(idx) * 1000, 2) ' Ток в А
+        bData(0, c + 1) = spBranchSmx.Z(idx)    ' S в МВА
+        bData(0, c + 2) = Round(spBranchD_ip.Z(idx), 2)    ' dP
+        bData(0, c + 3) = Round(spBranchD_iq.Z(idx), 2)    ' dQ
+        c = c + 4
+    Next
+    sheetBranches.Range(sheetBranches.Cells(GlobalRowBranches, 1), sheetBranches.Cells(GlobalRowBranches, bc * 4 + 1)).Value = bData
+    GlobalRowBranches = GlobalRowBranches + 1
+End Sub
+
+' === ИСПРАВЛЕНИЕ БЛОКА ИНВАРИАНТОВ ===
+
+Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex, RepairV, RepairCount, OutageV, OutageCount)
+    On Error Resume Next
+    
+    If vdtBranchIndex >= 0 Then
+        ' Сохраняем оригинальные параметры ВДТ
+        OriginalX = spBranchX.Z(vdtBranchIndex)
+        OriginalKtr = spBranchKtr.Z(vdtBranchIndex)
+        OriginalKti = spBranchKti.Z(vdtBranchIndex)
+        OriginalTip = spBranchTip.Z(vdtBranchIndex)
+        OriginalSta = spBranchSta.Z(vdtBranchIndex)
+
+        For inv = 0 To 17
+            TopologyRestore
+
+            ' 1. Сначала накладываем все отключения
+            If RepairCount > 0 Then 
+                PlaceOffs RepairV, RepairCount, vdtBranchIndex
+            End If
+            
+            If OutageCount > 0 Then 
+                PlaceOffs OutageV, OutageCount, vdtBranchIndex
+            End If
+
+            ' 2. ПРИНУДИТЕЛЬНО ВКЛЮЧАЕМ ВДТ (ставим 0!)
+            spBranchSta.Z(vdtBranchIndex) = 0 
+
+            ' 3. Устанавливаем тип трансформатора
+            spBranchTip.Z(vdtBranchIndex) = 1
+
+            ' 4. Проверка коэффициента трансформации (чтобы Rastr не "выплевывал" ветку)
+            ktr_val = SafeNum(Kt_Real(inv))
+            kti_val = SafeNum(Kt_Imag(inv))
+            
+            ' Проверяем, что коэффициенты не равны нулю (минимальная защита)
+            If Abs(ktr_val) < 0.001 Then ktr_val = 1.0
+            If Abs(kti_val) < 0.001 Then kti_val = 0.0
+
+            ' 5. Записываем параметры инварианта
+            spBranchX.Z(vdtBranchIndex) = SafeNum(X_Values(inv))
+            spBranchKtr.Z(vdtBranchIndex) = ktr_val
+            spBranchKti.Z(vdtBranchIndex) = kti_val
+            
+            On Error Resume Next
+            spBranch.Cols("n_anc").Z(vdtBranchIndex) = 0
+            On Error GoTo 0
+
+            ' 6. Считаем
+            VariantTitle = "Инв " & (inv + 1)
+            DoRgm RepairTitle, OutageTitle, VariantTitle
+        Next
+
+        ' Восстанавливаем оригинальные параметры
+        spBranchX.Z(vdtBranchIndex) = OriginalX
+        spBranchKtr.Z(vdtBranchIndex) = OriginalKtr
+        spBranchKti.Z(vdtBranchIndex) = OriginalKti
+        spBranchTip.Z(vdtBranchIndex) = OriginalTip
+        spBranchSta.Z(vdtBranchIndex) = OriginalSta
+    End If
+    
+    On Error GoTo 0
+End Sub
+
+' ============= ОСНОВНОЙ ЦИКЛ РАСЧЕТОВ =============
+
+On Error Resume Next
+
+' 1. НОРМАЛЬНАЯ СХЕМА (Baseline)
+TopologyRestore
+DoRgm "Нормальный режим", "", ""
+
+' Если есть ВДТ, считаем инварианты для нормальной схемы
+If VdtIndex >= 0 Then
+    DoInvariantCalculations "Норма", "", VdtIndex, Null, 0, Null, 0
+End If
+
+' 2. ЦИКЛ ПО РЕМОНТАМ (N-1)
+If rc > 0 Then
+    Dim RepairCount, RepairV, HasMore, RepairTitle
+    Set RepairComb = New Combinator
+
+    ' Перебор сочетаний ремонтов (от 1 до MaxRepair_count)
+    For RepairCount = 1 To MaxRepair_count
+        If RepairComb.Init(RepairIndexes, RepairCount, rc) Then
+            HasMore = RepairComb.FirstCombination(RepairV)
+
+            Do While HasMore
+                TopologyRestore
+                ' Отключаем ремонтные ветви и получаем их названия
+                RepairTitle = PlaceOffs(RepairV, RepairCount, VdtIndex)
+                
+                ' Расчет режима (Ремонт без доп. отключений)
+                DoRgm RepairTitle, "", ""
+
+                ' Инварианты ВДТ для текущего ремонта
+                If VdtIndex >= 0 Then
+                    DoInvariantCalculations RepairTitle, "", VdtIndex, RepairV, RepairCount, Null, 0
+                End If
+
+                ' 3. ЦИКЛ ПО ОТКЛЮЧЕНИЯМ (N-1-1 или N-2)
+                If oc > 0 Then
+                    Dim OutageCount, OutageV, HasMoreOutage, OutageTitle
+                    Set OutageComb = New Combinator
+
+                    For OutageCount = 1 To MaxOutage_count
+                        If OutageComb.Init(OutageIndexes, OutageCount, oc) Then
+                            HasMoreOutage = OutageComb.FirstCombination(OutageV)
+
+                            Do While HasMoreOutage
+                                TopologyRestore
+                                ' Сначала накладываем ремонт
+                                PlaceOffs RepairV, RepairCount, VdtIndex
+                                ' Затем накладываем аварийное отключение
+                                OutageTitle = PlaceOffs(OutageV, OutageCount, VdtIndex)
+                                
+                                ' Расчет режима (Ремонт + Отключение)
+                                DoRgm RepairTitle, OutageTitle, ""
+
+                                ' Инварианты ВДТ для этой комбинации
+                                If VdtIndex >= 0 Then
+                                    DoInvariantCalculations RepairTitle, OutageTitle, VdtIndex, RepairV, RepairCount, OutageV, OutageCount
+                                End If
+
+                                HasMoreOutage = OutageComb.NextCombination(OutageV)
+                            Loop
+                        End If
+                    Next
+                End If
+
+                HasMore = RepairComb.NextCombination(RepairV)
+            Loop
+        End If
+    Next
+End If
+
+On Error GoTo 0
+
+' === ЗАВЕРШЕНИЕ РАБОТЫ ===
+
+' Восстанавливаем группу ВДТ ветви
+If VdtIndex >= 0 And OriginalVdtGroup > 0 Then
+    On Error Resume Next
+    spBranchGrp.Z(VdtIndex) = OriginalVdtGroup
+    On Error GoTo 0
+    MsgBox "Группа ВДТ ветви восстановлена: " & OriginalVdtGroup, vbInformation, "Восстановление группы"
+End If
+
+sheetNodes.Columns.AutoFit
+sheetBranches.Columns.AutoFit
+
+spExcel.ScreenUpdating = True  ' Включаем обновление экрана
+spExcel.DisplayAlerts = True   ' Включаем предупреждения
+
+If VdtIndex >= 0 Then VdtStatus = "Да" Else VdtStatus = "Нет"
+MsgBox "Расчет завершен!" & vbCrLf & _
+       "Узлов: " & nc & vbCrLf & _
+       "Ветвей: " & bc & vbCrLf & _
+       "ВДТ: " & VdtStatus, vbInformation, "Готово"
