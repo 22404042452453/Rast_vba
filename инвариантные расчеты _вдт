@@ -22,6 +22,12 @@ If Err.Number <> 0 Then
    WScript.Quit
 End If
 
+Set spArea = Rastr.Tables("area")
+If Err.Number <> 0 Then
+   MsgBox "Ошибка при получении таблицы районов: " & Err.Description, vbCritical
+   WScript.Quit
+End If
+
 On Error GoTo 0
 
 PrepareTemplate
@@ -48,6 +54,12 @@ Set spBranchX = spBranch.Cols("x")
 Set spBranchKtr = spBranch.Cols("ktr")
 Set spBranchKti = spBranch.Cols("kti")
 
+' НОВЫЕ ПОЛЯ ДЛЯ ВЕТВЕЙ
+Set spBranchPl_ip = spBranch.Cols("pl_ip")
+Set spBranchQl_ip = spBranch.Cols("ql_ip")
+Set spBranchPl_iq = spBranch.Cols("pl_iq")
+Set spBranchQl_iq = spBranch.Cols("ql_iq")
+
 ' Поля узлов
 Set spNodeSta = spNode.Cols("sta")
 Set spNodeNy = spNode.Cols("ny")
@@ -57,6 +69,12 @@ Set spNodeUmin = spNode.Cols("umin")
 Set spNodeUmax = spNode.Cols("umax")
 Set spNodeV = spNode.Cols("vras")
 Set spNodeDelta = spNode.Cols("delta")
+
+' НОВЫЕ ПОЛЯ ДЛЯ РАЙОНОВ
+Set spAreaDp = spArea.Cols("dp")
+Set spAreaDq = spArea.Cols("dq")
+Set spAreaName = spArea.Cols("name")
+Set spAreaSel = spArea.Cols("sel")
 
 ' Инициализация Excel
 On Error Resume Next
@@ -68,7 +86,7 @@ End If
 
 spExcel.ScreenUpdating = True  ' ОПТИМИЗАЦИЯ: Отключаем обновление экрана
 spExcel.DisplayAlerts = False   ' ОПТИМИЗАЦИЯ: Отключаем предупреждения
-spExcel.SheetsInNewWorkbook = 2
+spExcel.SheetsInNewWorkbook = 3
 
 Set wb = spExcel.Workbooks.Add
 If Err.Number <> 0 Then
@@ -80,17 +98,20 @@ End If
 spExcel.Visible = True
 
 ' Создаём листы
-Dim sheetNodes, sheetBranches
+Dim sheetNodes, sheetBranches, sheetLosses
 Set sheetNodes = wb.Worksheets(1)
 Set sheetBranches = wb.Worksheets(2)
+Set sheetLosses = wb.Worksheets(3)
 
 sheetNodes.Name = "Nodes"
 sheetBranches.Name = "Branches"
+sheetLosses.Name = "Потери"
 On Error GoTo 0
 
 ' Глобальные счётчики строк для каждого листа
 GlobalRowNodes = 3
 GlobalRowBranches = 3
+GlobalRowLosses = 3
 
 Set spStoredOutages = CreateObject("Scripting.Dictionary")
 
@@ -129,10 +150,10 @@ Set OutageComb = new Combinator
 TopologyStore
 
 ' === ОПТИМИЗАЦИЯ 2: ЕДИНЫЙ ПРОХОД ДЛЯ СБОРА ВСЕХ ИНДЕКСОВ ===
-Dim BranchIndexes(), NodeIndexes(), RepairIndexes(), OutageIndexes(), VdtIndex
-Dim bc, nc, rc, oc
+Dim BranchIndexes(), NodeIndexes(), AreaIndexes(), RepairIndexes(), OutageIndexes(), VdtIndex
+Dim bc, nc, ac, rc, oc
 
-bc = 0: nc = 0: rc = 0: oc = 0
+bc = 0: nc = 0: ac = 0: rc = 0: oc = 0
 VdtIndex = -1
 
 ' Один проход по таблице ветвей для сбора всех индексов
@@ -158,6 +179,13 @@ For i = 0 To spNode.Count - 1
    End If
 Next
 
+' Один проход по таблице районов
+For i = 0 To spArea.Count - 1
+   If spAreaSel.Z(i) = True Then
+       ReDim Preserve AreaIndexes(ac): AreaIndexes(ac) = i: ac = ac + 1
+   End If
+Next
+
 ' Проверка наличия элементов для отчета
 If bc = 0 Then
    MsgBox "ВНИМАНИЕ: Не найдено ни одной ветви с флагом Report!" & vbCrLf & _
@@ -173,6 +201,17 @@ If nc = 0 Then
    spExcel.Quit
    Set spExcel = Nothing
    WScript.Quit
+End If
+
+If ac = 0 Then
+   MsgBox "ВНИМАНИЕ: Не найдено ни одного района с флагом sel!" & vbCrLf & _
+          "Лист 'Потери' не будет создан." & vbCrLf & _
+          "Установите флаг sel на нужных районах, если хотите видеть потери по районам.", vbExclamation, "Нет районов для отчета"
+   ' Удаляем лист "Потери" если нет районов
+   On Error Resume Next
+   sheetLosses.Delete
+   Set sheetLosses = Nothing
+   On Error GoTo 0
 End If
 
 ' === ПРОВЕРКА КОНФЛИКТОВ ВДТ ===
@@ -212,9 +251,9 @@ If VdtIndex >= 0 Then
        HasConflict = True
        VdtIndex = -1
    Else
-       MsgBox "? ВДТ ветвь: [" & VdtIndex & "] " & spBranchNm.ZS(VdtIndex) & vbCrLf & _
-              "? Проверка пройдена: нет конфликтов" & vbCrLf & vbCrLf & _
-              "Будет выполнено 18 инвариантных расчетов.", vbInformation, "ВДТ готова"
+       MsgBox "✓ ВДТ ветвь: [" & VdtIndex & "] " & spBranchNm.ZS(VdtIndex) & vbCrLf & _
+              "✓ Проверка пройдена: нет конфликтов" & vbCrLf & vbCrLf & _
+              "Будет выполнено 35 инвариантных расчетов.", vbInformation, "ВДТ готова"
    End If
 End If
 
@@ -247,17 +286,19 @@ If VdtIndex >= 0 Then
 End If
 
 ' === ИТОГОВАЯ ИНФОРМАЦИЯ ===
-Dim VdtStatus
+Dim VdtStatus, AreaStatus
 If VdtIndex >= 0 Then VdtStatus = "Да" Else VdtStatus = "Нет"
+If ac > 0 Then AreaStatus = CStr(ac) Else AreaStatus = "Нет"
 
 MsgBox "Готово к расчету:" & vbCrLf & _
       "• Ветвей в отчете: " & bc & vbCrLf & _
       "• Узлов в отчете: " & nc & vbCrLf & _
+      "• Районов в отчете: " & AreaStatus & vbCrLf & _
       "• Ремонтных ветвей: " & rc & vbCrLf & _
       "• Отключаемых ветвей: " & oc & vbCrLf & _
       "• ВДТ: " & VdtStatus, vbInformation, "Начало расчета"
 
-' === ИСПРАВЛЕННАЯ ОПТИМИЗАЦИЯ 3: ШАПКИ ===
+' === ШАПКИ ТАБЛИЦ ===
 
 ' Шапка для узлов (по количеству узлов в отчете nc)
 Dim headerDataNodes()
@@ -273,9 +314,9 @@ For i = 0 To nc - 1
 Next
 sheetNodes.Range(sheetNodes.Cells(1, 1), sheetNodes.Cells(2, nc * 2 + 1)).Value = headerDataNodes
 
-' Шапка для ветвей (по количеству веток в отчете bc)
+' Шапка для ветвей (9 колонок на ветвь)
 Dim headerDataBranches()
-ReDim headerDataBranches(1, bc * 4)
+ReDim headerDataBranches(1, bc * 9)
 
 headerDataBranches(0, 0) = "Режим"
 colIndex = 1
@@ -283,11 +324,32 @@ For i = 0 To bc - 1
    headerDataBranches(0, colIndex) = spBranchNm.ZS(BranchIndexes(i))
    headerDataBranches(1, colIndex) = "I, А"
    headerDataBranches(1, colIndex + 1) = "S, МВА"
-   headerDataBranches(1, colIndex + 2) = "dP, МВт"
-   headerDataBranches(1, colIndex + 3) = "dQ, МВар"
-   colIndex = colIndex + 4
+   headerDataBranches(1, colIndex + 2) = "P_нач, МВт"
+   headerDataBranches(1, colIndex + 3) = "Q_нач, МВар"
+   headerDataBranches(1, colIndex + 4) = "P_кон, МВт"
+   headerDataBranches(1, colIndex + 5) = "Q_кон, МВар"
+   headerDataBranches(1, colIndex + 6) = "δ_нач, °"
+   headerDataBranches(1, colIndex + 7) = "δ_кон, °"
+   headerDataBranches(1, colIndex + 8) = "Δδ, °"
+   colIndex = colIndex + 9
 Next
-sheetBranches.Range(sheetBranches.Cells(1, 1), sheetBranches.Cells(2, bc * 4 + 1)).Value = headerDataBranches
+sheetBranches.Range(sheetBranches.Cells(1, 1), sheetBranches.Cells(2, bc * 9 + 1)).Value = headerDataBranches
+
+' Шапка для потерь (2 колонки на район)
+If ac > 0 Then
+   Dim headerDataLosses()
+   ReDim headerDataLosses(1, ac * 2)
+   
+   headerDataLosses(0, 0) = "Режим"
+   colIndex = 1
+   For i = 0 To ac - 1
+       headerDataLosses(0, colIndex) = spAreaName.ZS(AreaIndexes(i))
+       headerDataLosses(1, colIndex) = "ΔP, МВт"
+       headerDataLosses(1, colIndex + 1) = "ΔQ, МВар"
+       colIndex = colIndex + 2
+   Next
+   sheetLosses.Range(sheetLosses.Cells(1, 1), sheetLosses.Cells(2, ac * 2 + 1)).Value = headerDataLosses
+End If
 
 ' Данные для инвариантных расчетов
 Dim X_Values, Kt_Real, Kt_Imag
@@ -461,7 +523,7 @@ Function SafeNum(val)
    SafeNum = CDbl(Replace(CStr(val), ".", sep))
 End Function
 
-' === ИСПРАВЛЕННАЯ ФУНКЦИЯ DoRgm ===
+' === РАСШИРЕННАЯ ФУНКЦИЯ DoRgm ===
 
 Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
    On Error Resume Next
@@ -473,7 +535,7 @@ Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
 
    ' Название режима
    RegimeName = ""
-   If RepairTitle = "" Then RegimeName = "Нормальный режим" Else RegimeName = "Рем: " & RepairTitle
+   If RepairTitle = "" Then RegimeName = "Нормальный режим" Else RegimeName = "Режим: " & RepairTitle
    If OutageTitle <> "" Then RegimeName = RegimeName & " + Откл: " & OutageTitle
    If VariantTitle <> "" Then RegimeName = RegimeName & " [" & VariantTitle & "]"
    If Status <> 0 Then RegimeName = RegimeName & " (НЕ СОШЕЛСЯ)"
@@ -484,31 +546,55 @@ Sub DoRgm(RepairTitle, OutageTitle, VariantTitle)
    c = 1
    For i = 0 To nc - 1
        idx = NodeIndexes(i)
-       nData(0, c) = Round(spNodeV.Z(idx), 2)
-       nData(0, c + 1) = Round(spNodeDelta.Z(idx), 2)
+       nData(0, c) = Round(spNodeV.Z(idx), 3)
+       nData(0, c + 1) = Round(spNodeDelta.Z(idx), 3)
        c = c + 2
    Next
    sheetNodes.Range(sheetNodes.Cells(GlobalRowNodes, 1), sheetNodes.Cells(GlobalRowNodes, nc * 2 + 1)).Value = nData
    GlobalRowNodes = GlobalRowNodes + 1
 
-   ' ЗАПИСЬ ВЕТВЕЙ (bc) - ТУТ БЫЛА ОШИБКА rc
-   Dim bData(): ReDim bData(0, bc * 4)
+   ' ЗАПИСЬ ВЕТВЕЙ (bc) - 9 колонок
+   Dim bData(): ReDim bData(0, bc * 9)
    bData(0, 0) = RegimeName
    c = 1
    For i = 0 To bc - 1
        idx = BranchIndexes(i)
-       ' Используем стандартные поля Rastr для тока и мощности
-       bData(0, c) = Round(spBranchImax.Z(idx) * 1000, 2) ' Ток в А
-       bData(0, c + 1) = spBranchSmx.Z(idx)    ' S в МВА
-       bData(0, c + 2) = Round(spBranchD_ip.Z(idx), 2)    ' dP
-       bData(0, c + 3) = Round(spBranchD_iq.Z(idx), 2)    ' dQ
-       c = c + 4
+       Dim delta_diff
+       delta_diff = spBranchD_ip.Z(idx) - spBranchD_iq.Z(idx)
+       
+       bData(0, c) = Round(spBranchImax.Z(idx) * 1000, 3)      ' I, А
+       bData(0, c + 1) = spBranchSmx.Z(idx)                    ' S, МВА
+       bData(0, c + 2) = Round(spBranchPl_ip.Z(idx), 3)        ' P_нач, МВт
+       bData(0, c + 3) = Round(spBranchQl_ip.Z(idx), 3)        ' Q_нач, МВар
+       bData(0, c + 4) = Round(spBranchPl_iq.Z(idx), 3)        ' P_кон, МВт
+       bData(0, c + 5) = Round(spBranchQl_iq.Z(idx), 3)        ' Q_кон, МВар
+       bData(0, c + 6) = Round(spBranchD_ip.Z(idx), 3)         ' δ_нач, °
+       bData(0, c + 7) = Round(spBranchD_iq.Z(idx), 3)         ' δ_кон, °
+       bData(0, c + 8) = Round(delta_diff, 3)                  ' Δδ, °
+       c = c + 9
    Next
-   sheetBranches.Range(sheetBranches.Cells(GlobalRowBranches, 1), sheetBranches.Cells(GlobalRowBranches, bc * 4 + 1)).Value = bData
+   sheetBranches.Range(sheetBranches.Cells(GlobalRowBranches, 1), sheetBranches.Cells(GlobalRowBranches, bc * 9 + 1)).Value = bData
    GlobalRowBranches = GlobalRowBranches + 1
+
+   ' ЗАПИСЬ ПОТЕРЬ ПО РАЙОНАМ (ac)
+   If ac > 0 And Not sheetLosses Is Nothing Then
+       Dim lData(): ReDim lData(0, ac * 2)
+       lData(0, 0) = RegimeName
+       c = 1
+       For i = 0 To ac - 1
+           idx = AreaIndexes(i)
+           lData(0, c) = Round(spAreaDp.Z(idx), 3)              ' ΔP, МВт
+           lData(0, c + 1) = Round(spAreaDq.Z(idx), 3)          ' ΔQ, МВар
+           c = c + 2
+       Next
+       sheetLosses.Range(sheetLosses.Cells(GlobalRowLosses, 1), sheetLosses.Cells(GlobalRowLosses, ac * 2 + 1)).Value = lData
+       GlobalRowLosses = GlobalRowLosses + 1
+   End If
+   
+   On Error GoTo 0
 End Sub
 
-' === ИСПРАВЛЕНИЕ БЛОКА ИНВАРИАНТОВ ===
+' === ФУНКЦИЯ ИНВАРИАНТНЫХ РАСЧЕТОВ ===
 
 Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex, RepairV, RepairCount, OutageV, OutageCount)
    On Error Resume Next
@@ -557,7 +643,6 @@ Sub DoInvariantCalculations(RepairTitle, OutageTitle, vdtBranchIndex, RepairV, R
            On Error GoTo 0
 
            ' 6. Считаем
-           ' Номер анцапфы - "Анц. " &
            VariantTitle = inv + 1
            DoRgm RepairTitle, OutageTitle, VariantTitle
        Next
@@ -583,8 +668,7 @@ DoRgm "Нормальный режим", "", ""
 
 ' Если есть ВДТ, считаем инварианты для нормальной схемы
 If VdtIndex >= 0 Then
-   DoInvariantCalculations "Норма", "", VdtIndex, Null, 0, Null, 0
-   'DoInvariantCalculations Null, Null, VdtIndex, Null, 0, Null, 0
+   DoInvariantCalculations "Нормальный режим", "", VdtIndex, Null, 0, Null, 0
 End If
 
 ' 2. ЦИКЛ ПО РЕМОНТАМ (N-1)
@@ -660,12 +744,18 @@ End If
 
 sheetNodes.Columns.AutoFit
 sheetBranches.Columns.AutoFit
+If ac > 0 And Not sheetLosses Is Nothing Then
+   sheetLosses.Columns.AutoFit
+End If
 
 spExcel.ScreenUpdating = True  ' Включаем обновление экрана
 spExcel.DisplayAlerts = True   ' Включаем предупреждения
 
 If VdtIndex >= 0 Then VdtStatus = "Да" Else VdtStatus = "Нет"
+If ac > 0 Then AreaStatus = CStr(ac) Else AreaStatus = "Нет"
+
 MsgBox "Расчет завершен!" & vbCrLf & _
       "Узлов: " & nc & vbCrLf & _
       "Ветвей: " & bc & vbCrLf & _
+      "Районов: " & AreaStatus & vbCrLf & _
       "ВДТ: " & VdtStatus, vbInformation, "Готово"
